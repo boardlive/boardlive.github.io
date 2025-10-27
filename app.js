@@ -221,9 +221,14 @@ const fillLabelEl = $('fillLabel');
 const toolSettingsPanel = $('toolSettingsPanel');
 const toolSettingsToggle = $('toolSettingsToggle');
 const toolSettingsClose = $('toolSettingsClose');
+const toolSettingsPin = $('toolSettingsPin');
+const toolSettingsHead = toolSettingsPanel?.querySelector('.tool-settings-head');
 const pageTabBtn = toolSettingsPanel?.querySelector('.tool-tab[data-tab="page"]');
 const toolSettingsToolPane = toolSettingsPanel?.querySelector('[data-pane="tool"]');
 const toolSettingsPagePane = toolSettingsPanel?.querySelector('[data-pane="page"]');
+const strokeSetting = toolSettingsPanel?.querySelector('[data-field="stroke"]');
+const sizeSetting = toolSettingsPanel?.querySelector('[data-field="size"]');
+const eraserSetting = toolSettingsPanel?.querySelector('[data-field="eraser"]');
 const guestControls = [colorInput, sizeInput, fillInput, eraserBtn, eraserSizeInput, ...toolButtons].filter(Boolean);
 const headerEl = document.querySelector('header');
 const viewToggleBtn = $('viewToggle');
@@ -272,12 +277,17 @@ let activePointerId = null;
 let touchPanActive = false;
 let toolSettingsOpen = false;
 let toolSettingsPane = 'tool';
+let toolSettingsPinned = false;
+let toolSettingsHasCustomPosition = false;
+const toolSettingsPosition = { left:null, top:null };
+const toolSettingsDrag = { active:false, pointerId:null, offsetX:0, offsetY:0, width:0, height:0 };
+const TOOL_SETTINGS_MARGIN = 12;
 const TOOL_DEFAULTS = {
   pen: { stroke:'#111827', size:4 },
   line: { stroke:'#f97316', size:6 },
   rect: { stroke:'#2563eb', fill:'#bfdbfe', size:5 },
   ellipse: { stroke:'#22c55e', fill:'#bbf7d0', size:5 },
-  highlight: { stroke:'#facc15', size:18 }
+  highlight: { stroke:'#facc15', size:20 }
 };
 const toolSettings = new Map(Object.entries(TOOL_DEFAULTS).map(([tool, cfg])=>[
   tool,
@@ -325,6 +335,12 @@ const TOOL_UI_COPY = {
     stroke:'Color del resaltador',
     size:'Ancho (px)',
     showFill:false
+  },
+  eraser: {
+    icon:'🧽',
+    title:'Borrador',
+    hint:'Elimina trazos dibujados en la pizarra.',
+    showFill:false
   }
 };
 
@@ -352,6 +368,164 @@ function updateToolTriggerLabel(){
   toolSettingsToggle.title = `Seleccionar herramienta (${label})`;
 }
 
+function updateToolSettingsPinUi(){
+  if(!toolSettingsPin) return;
+  const label = toolSettingsPinned ? 'Desfijar panel de herramientas' : 'Fijar panel de herramientas';
+  toolSettingsPin.setAttribute('aria-pressed', toolSettingsPinned ? 'true' : 'false');
+  toolSettingsPin.setAttribute('aria-label', label);
+  toolSettingsPin.title = label;
+  toolSettingsPin.textContent = toolSettingsPinned ? '📍' : '📌';
+}
+
+function captureToolSettingsPosition(){
+  if(!toolSettingsPanel) return;
+  const rect = toolSettingsPanel.getBoundingClientRect();
+  toolSettingsPosition.left = rect.left;
+  toolSettingsPosition.top = rect.top;
+}
+
+function applyToolSettingsPosition(){
+  if(!toolSettingsPanel) return;
+  if(Number.isFinite(toolSettingsPosition.left) && Number.isFinite(toolSettingsPosition.top)){
+    toolSettingsPanel.style.left = `${Math.round(toolSettingsPosition.left)}px`;
+    toolSettingsPanel.style.top = `${Math.round(toolSettingsPosition.top)}px`;
+    toolSettingsPanel.style.right = 'auto';
+    toolSettingsPanel.style.bottom = 'auto';
+  }
+}
+
+function resetToolSettingsPosition(){
+  toolSettingsHasCustomPosition = false;
+  toolSettingsPosition.left = null;
+  toolSettingsPosition.top = null;
+}
+
+function ensureToolSettingsWithinViewport(){
+  if(!toolSettingsPanel) return;
+  if(!toolSettingsHasCustomPosition && !toolSettingsPinned) return;
+  const rect = toolSettingsPanel.getBoundingClientRect();
+  const margin = TOOL_SETTINGS_MARGIN;
+  const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+  const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
+  let left = rect.left;
+  let top = rect.top;
+  let adjusted = false;
+  if(left < margin){
+    left = margin;
+    adjusted = true;
+  } else if(left > maxLeft){
+    left = maxLeft;
+    adjusted = true;
+  }
+  if(top < margin){
+    top = margin;
+    adjusted = true;
+  } else if(top > maxTop){
+    top = maxTop;
+    adjusted = true;
+  }
+  if(adjusted){
+    toolSettingsPosition.left = left;
+    toolSettingsPosition.top = top;
+    applyToolSettingsPosition();
+  }
+}
+
+function setToolSettingsPinned(pinned){
+  const next = !!pinned;
+  if(next === toolSettingsPinned) return;
+  toolSettingsPinned = next;
+  if(toolSettingsPanel){
+    toolSettingsPanel.dataset.pinned = next ? 'true' : 'false';
+  }
+  updateToolSettingsPinUi();
+  if(next){
+    if(!toolSettingsOpen){
+      setToolSettingsOpen(true, { force:true });
+    }
+    captureToolSettingsPosition();
+    toolSettingsHasCustomPosition = true;
+    ensureToolSettingsWithinViewport();
+    applyToolSettingsPosition();
+  } else {
+    resetToolSettingsPosition();
+    positionToolSettings();
+  }
+}
+
+function forceCloseToolSettings({ resetPin=false } = {}){
+  if(resetPin && toolSettingsPinned){
+    setToolSettingsPinned(false);
+  }
+  setToolSettingsOpen(false, { force:true });
+}
+
+function setToolSettingsDragging(active){
+  if(!toolSettingsPanel) return;
+  if(active){
+    toolSettingsPanel.dataset.dragging = 'true';
+  } else {
+    delete toolSettingsPanel.dataset.dragging;
+  }
+}
+
+function startToolSettingsDrag(e){
+  if(!toolSettingsPanel) return;
+  const isPrimary = e.button === undefined || e.button === 0;
+  if(!isPrimary) return;
+  if(e.target && e.target.closest('button')) return;
+  const rect = toolSettingsPanel.getBoundingClientRect();
+  toolSettingsDrag.active = true;
+  toolSettingsDrag.pointerId = e.pointerId ?? 'mouse';
+  toolSettingsDrag.offsetX = e.clientX - rect.left;
+  toolSettingsDrag.offsetY = e.clientY - rect.top;
+  toolSettingsDrag.width = rect.width;
+  toolSettingsDrag.height = rect.height;
+  toolSettingsHasCustomPosition = true;
+  toolSettingsPosition.left = rect.left;
+  toolSettingsPosition.top = rect.top;
+  applyToolSettingsPosition();
+  setToolSettingsDragging(true);
+  if(toolSettingsPanel.setPointerCapture && e.pointerId !== undefined){
+    try{ toolSettingsPanel.setPointerCapture(e.pointerId); }catch(err){}
+  }
+  e.preventDefault();
+}
+
+function moveToolSettingsDrag(e){
+  if(!toolSettingsDrag.active) return;
+  if(toolSettingsDrag.pointerId !== 'mouse' && e.pointerId !== undefined && e.pointerId !== toolSettingsDrag.pointerId) return;
+  const width = toolSettingsDrag.width || (toolSettingsPanel?.offsetWidth ?? 0);
+  const height = toolSettingsDrag.height || (toolSettingsPanel?.offsetHeight ?? 0);
+  const margin = TOOL_SETTINGS_MARGIN;
+  const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+  const maxTop = Math.max(margin, window.innerHeight - height - margin);
+  const baseLeft = e.clientX - toolSettingsDrag.offsetX;
+  const baseTop = e.clientY - toolSettingsDrag.offsetY;
+  toolSettingsPosition.left = clamp(baseLeft, margin, maxLeft);
+  toolSettingsPosition.top = clamp(baseTop, margin, maxTop);
+  applyToolSettingsPosition();
+  e.preventDefault();
+}
+
+function endToolSettingsDrag(e){
+  if(!toolSettingsDrag.active) return;
+  if(toolSettingsDrag.pointerId !== 'mouse' && e.pointerId !== undefined && e.pointerId !== toolSettingsDrag.pointerId) return;
+  toolSettingsDrag.active = false;
+  toolSettingsDrag.pointerId = null;
+  toolSettingsDrag.offsetX = 0;
+  toolSettingsDrag.offsetY = 0;
+  toolSettingsDrag.width = 0;
+  toolSettingsDrag.height = 0;
+  ensureToolSettingsWithinViewport();
+  if(toolSettingsPanel?.releasePointerCapture && e.pointerId !== undefined){
+    try{ toolSettingsPanel.releasePointerCapture(e.pointerId); }catch(err){}
+  }
+  captureToolSettingsPosition();
+  setToolSettingsDragging(false);
+  e.preventDefault();
+}
+
 let headerResizeObserver = null;
 if(headerEl && typeof ResizeObserver === 'function'){
   headerResizeObserver = new ResizeObserver(()=>{
@@ -363,6 +537,10 @@ if(headerEl && typeof ResizeObserver === 'function'){
 setToolSettingsPane('tool');
 setToolSettingsOpen(false);
 setTouchPanMode(false);
+if(toolSettingsPanel){
+  toolSettingsPanel.dataset.pinned = 'false';
+}
+updateToolSettingsPinUi();
 
 if(pageTabBtn){
   const pageLabel = `${PAGE_UI_COPY.icon} ${PAGE_UI_COPY.title}`;
@@ -378,7 +556,7 @@ if(pageToggleBtn && !pageToggleBtn.getAttribute('aria-label')){
 const hostButtonConfig = {
   idle: { label:'🖥️ Compartir mi pizarra' },
   pending: { label:'🖥️ Creando conexión…', ariaBusy:true, disabled:true },
-  active: { label:'🖥️ Pizarra compartida', title:'Pulsa para dejar de compartir' },
+  active: { label:'🖥️ Compartiendo pizarra', title:'Pulsa para dejar de compartir' },
   error: { label:'🖥️ Reintentar compartir' }
 };
 let hostButtonState = hostBtn?.dataset.state || 'idle';
@@ -443,9 +621,11 @@ function isShapeTool(tool){
 function updateToolSelection(){
   toolButtons.forEach(btn=>{
     const tool = btn.dataset.tool;
-    const active = !erasing && currentTool === tool;
+    const isEraser = tool === 'eraser';
+    const active = erasing ? isEraser : currentTool === tool;
+    const selected = toolSettingsPane === 'tool' && active;
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    btn.setAttribute('aria-selected', toolSettingsPane === 'tool' && active ? 'true' : 'false');
+    btn.setAttribute('aria-selected', selected ? 'true' : 'false');
     btn.classList.toggle('active', active);
     const desiredLabel = toolDisplayLabel(tool);
     if(btn.textContent !== desiredLabel){
@@ -460,31 +640,53 @@ function updateToolSelection(){
 }
 
 function updateToolSettingsUi(){
-  const tool = currentTool;
+  const tool = erasing ? 'eraser' : currentTool;
   const copy = TOOL_UI_COPY[tool] || TOOL_UI_COPY.pen;
   if(toolSettingsPane === 'tool'){
     if(toolSettingsTitle) toolSettingsTitle.textContent = copy.title || 'Herramienta';
     if(toolSettingsHint) toolSettingsHint.textContent = copy.hint || 'Ajusta las propiedades de la herramienta seleccionada.';
   }
-  if(strokeLabelEl) strokeLabelEl.textContent = copy.stroke || 'Color';
-  if(sizeLabelEl) sizeLabelEl.textContent = copy.size || 'Grosor (px)';
-  const strokeColor = rawToolStrokeColor(tool);
-  const sizeValue = getToolSize(tool);
-  if(colorInput){
-    colorInput.value = strokeColor;
+  const showStroke = tool !== 'eraser';
+  const showSize = tool !== 'eraser';
+  const showFill = !!copy.showFill && tool !== 'eraser';
+
+  toggleToolSetting(strokeSetting, showStroke);
+  toggleToolSetting(sizeSetting, showSize);
+  toggleToolSetting(eraserSetting, tool === 'eraser');
+
+  if(showStroke && strokeLabelEl) strokeLabelEl.textContent = copy.stroke || 'Color';
+  if(showSize && sizeLabelEl) sizeLabelEl.textContent = copy.size || 'Grosor (px)';
+
+  if(showStroke && colorInput){
+    colorInput.value = rawToolStrokeColor(tool);
   }
-  if(sizeInput){
-    sizeInput.value = String(sizeValue);
+  if(showSize && sizeInput){
+    sizeInput.value = String(getToolSize(tool));
   }
+
   if(fillSetting){
-    const showFill = !!copy.showFill;
-    fillSetting.hidden = !showFill;
+    toggleToolSetting(fillSetting, showFill);
     if(showFill){
       if(fillLabelEl) fillLabelEl.textContent = copy.fill || 'Relleno';
       if(fillInput){
         fillInput.value = toolFillColor(tool);
       }
     }
+  }
+
+  if(tool === 'eraser' && eraserSizeInput){
+    eraserSizeInput.value = String(getEraserSize());
+  }
+}
+
+function toggleToolSetting(el, show){
+  if(!el) return;
+  const visible = !!show;
+  el.hidden = !visible;
+  el.style.display = visible ? '' : 'none';
+  const field = el.querySelector('input, select, textarea');
+  if(field){
+    field.disabled = !visible;
   }
 }
 
@@ -495,6 +697,15 @@ function positionToolSettings(){
     toolSettingsPanel.style.removeProperty('top');
     toolSettingsPanel.style.removeProperty('left');
     toolSettingsPanel.style.removeProperty('right');
+    toolSettingsPanel.style.removeProperty('bottom');
+    if(!toolSettingsPinned){
+      resetToolSettingsPosition();
+    }
+    return;
+  }
+  if((toolSettingsPinned || toolSettingsHasCustomPosition) && Number.isFinite(toolSettingsPosition.left) && Number.isFinite(toolSettingsPosition.top)){
+    applyToolSettingsPosition();
+    ensureToolSettingsWithinViewport();
     return;
   }
   const headerRect = headerEl?.getBoundingClientRect();
@@ -502,6 +713,7 @@ function positionToolSettings(){
   toolSettingsPanel.style.top = `${top}px`;
   toolSettingsPanel.style.removeProperty('bottom');
   toolSettingsPanel.style.removeProperty('left');
+  toolSettingsPanel.style.right = '16px';
 }
 
 function setToolSettingsPane(pane){
@@ -518,8 +730,11 @@ function setToolSettingsPane(pane){
   updateToolSelection();
 }
 
-function setToolSettingsOpen(open){
+function setToolSettingsOpen(open, { force=false } = {}){
   const next = !!open;
+  if(!next && toolSettingsPinned && !force){
+    return;
+  }
   if(next === toolSettingsOpen){
     if(next) positionToolSettings();
     return;
@@ -535,14 +750,28 @@ function setToolSettingsOpen(open){
   if(next){
     positionToolSettings();
     setToolSettingsPane(toolSettingsPane);
+  } else if(!toolSettingsPinned){
+    resetToolSettingsPosition();
   }
 }
 
 function toggleToolSettings(){
-  setToolSettingsOpen(!toolSettingsOpen);
+  if(toolSettingsOpen){
+    forceCloseToolSettings();
+  } else {
+    setToolSettingsOpen(true);
+  }
 }
 
 function setCurrentTool(tool, { silent=false } = {}){
+  if(tool === 'eraser'){
+    setEraserMode(true);
+    setToolSettingsPane('tool');
+    if(!silent){
+      setToolSettingsOpen(true);
+    }
+    return;
+  }
   const allowed = ['pen', 'line', 'rect', 'ellipse', 'highlight'];
   const next = allowed.includes(tool) ? tool : 'pen';
   currentTool = next;
@@ -1269,7 +1498,7 @@ function toggleHidden(elements, hidden){
     if(!el) return;
     el.classList.toggle('hidden', hidden);
     if(hidden && el === toolSettingsPanel){
-      setToolSettingsOpen(false);
+      forceCloseToolSettings();
     }
     if(hidden && typeof el.contains === 'function' && el.contains(document.activeElement)){
       try{ document.activeElement.blur(); }catch(e){}
@@ -1312,7 +1541,9 @@ function setActiveSection(id, {force=false} = {}){
   toolbarControls.dataset.active = id;
   refreshSectionButtons();
   if(id !== 'draw'){
-    setToolSettingsOpen(false);
+    if(!toolSettingsPinned){
+      setToolSettingsOpen(false);
+    }
   } else if(!toolSettingsOpen){
     setToolSettingsOpen(true);
   }
@@ -1482,6 +1713,9 @@ function setEraserMode(active){
       setToolSettingsPane('tool');
     } else {
       updateToolSelection();
+      if(toolSettingsPane === 'tool'){
+        updateToolSettingsUi();
+      }
     }
     return;
   }
@@ -1491,6 +1725,9 @@ function setEraserMode(active){
     setToolSettingsPane('tool');
   } else {
     updateToolSelection();
+    if(toolSettingsPane === 'tool'){
+      updateToolSettingsUi();
+    }
   }
 }
 
@@ -1509,7 +1746,7 @@ function updateGuestControls(){
   if(disable){
     drawing = false;
     if(erasing) setEraserMode(false);
-    setToolSettingsOpen(false);
+    forceCloseToolSettings();
   }
 }
 
@@ -1531,7 +1768,7 @@ function updateRoleUi(){
   }
   if(headerEl) headerEl.dataset.role = isHost ? 'host' : 'guest';
   if(roleLabel){
-    roleLabel.textContent = isHost ? 'Modo (anfitrión):' : 'Modo (invitado):';
+    roleLabel.textContent = isHost ? 'Modo anfitrión:' : 'Modo invitado:';
   }
   if(!isHost) setPagePanelOpen(false);
   if(!isHost && toolSettingsPane === 'page'){
@@ -2146,12 +2383,16 @@ toolSettingsToggle?.addEventListener('click', ()=>{
 });
 
 toolSettingsClose?.addEventListener('click', ()=>{
-  setToolSettingsOpen(false);
+  forceCloseToolSettings();
+});
+
+toolSettingsPin?.addEventListener('click', ()=>{
+  setToolSettingsPinned(!toolSettingsPinned);
 });
 
 document.addEventListener('keydown', e=>{
   if(e.key === 'Escape' && toolSettingsOpen){
-    setToolSettingsOpen(false);
+    forceCloseToolSettings();
     toolSettingsToggle?.focus();
   }
 });
@@ -2160,6 +2401,7 @@ document.addEventListener('pointerdown', e=>{
   if(!toolSettingsOpen) return;
   const target = e.target;
   if(toolSettingsPanel?.contains(target) || toolSettingsToggle?.contains(target)) return;
+  if(toolSettingsPinned) return;
   setToolSettingsOpen(false);
 });
 
@@ -2243,6 +2485,11 @@ pagePanelHead?.addEventListener('pointerdown', startPagePanelDrag);
 document.addEventListener('pointermove', updatePagePanelDrag);
 document.addEventListener('pointerup', endPagePanelDrag);
 document.addEventListener('pointercancel', endPagePanelDrag);
+
+toolSettingsHead?.addEventListener('pointerdown', startToolSettingsDrag);
+document.addEventListener('pointermove', moveToolSettingsDrag);
+document.addEventListener('pointerup', endToolSettingsDrag);
+document.addEventListener('pointercancel', endToolSettingsDrag);
 
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Escape') return;

@@ -38,6 +38,13 @@
     header[data-role="host"] + #toolSettingsPanel .tool-setting{ border-color:rgba(34,197,94,.28); }
     .tool-settings-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
     .tool-settings-heading{ display:flex; flex-direction:column; gap:.18rem; }
+    .tool-settings-head{ cursor:grab; }
+    #toolSettingsPanel[data-dragging="true"] .tool-settings-head{ cursor:grabbing; }
+    .tool-settings-actions{ display:flex; align-items:center; gap:.35rem; }
+    .tool-settings-actions .btn{ padding:.32rem .55rem; min-width:0; }
+    #toolSettingsPin[aria-pressed="true"]{ border-color:#34d399; color:#bbf7d0; background:rgba(34,197,94,.22); box-shadow:0 0 0 1px rgba(52,211,153,.3) inset; }
+    #toolSettingsPanel[data-pinned="true"]{ border-color:rgba(96,165,250,.45); box-shadow:0 24px 48px rgba(30,64,175,.4); }
+    #toolSettingsPanel[data-pinned="true"] .tool-settings-head strong{ color:#bfdbfe; }
     .tool-settings-head strong{ font-size:1rem; letter-spacing:.01em; color:#e2e8f0; }
     .tool-settings-head span{ font-size:.8rem; color:var(--muted); }
     .tool-settings-tabs{ display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }

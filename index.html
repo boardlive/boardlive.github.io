@@ -62,7 +62,10 @@
           <strong id="toolSettingsTitle">Trazo libre</strong>
           <span id="toolSettingsHint">Ajusta las propiedades de la herramienta seleccionada</span>
         </div>
-        <button id="toolSettingsClose" class="btn icon-btn" type="button" aria-label="Cerrar ajustes">✕</button>
+        <div class="tool-settings-actions">
+          <button id="toolSettingsPin" class="btn icon-btn" type="button" aria-pressed="false" aria-label="Fijar panel de herramientas">📌</button>
+          <button id="toolSettingsClose" class="btn icon-btn" type="button" aria-label="Cerrar ajustes">✕</button>
+        </div>
       </div>
       <div class="tool-settings-tabs" role="tablist" aria-label="Herramientas disponibles">
         <button class="btn tool-btn" type="button" data-tool="pen" aria-selected="true" title="Trazo libre">✏️ Trazo</button>
@@ -70,6 +73,7 @@
         <button class="btn tool-btn" type="button" data-tool="rect" aria-selected="false" title="Dibujar rectángulo">⬛ Rectángulo</button>
         <button class="btn tool-btn" type="button" data-tool="ellipse" aria-selected="false" title="Dibujar círculo o elipse">⚪ Círculo</button>
         <button class="btn tool-btn" type="button" data-tool="highlight" aria-selected="false" title="Resaltador semitransparente">🟡 Resaltador</button>
+        <button class="btn tool-btn" type="button" data-tool="eraser" aria-selected="false" title="Borrador">🧽 Borrador</button>
         <button class="btn tool-tab host-only" type="button" data-tab="page" aria-selected="false" title="Opciones de la página">📄 Página</button>
       </div>
       <div class="tool-settings-content">
@@ -86,7 +90,7 @@
             <span id="fillLabel">Relleno</span>
             <input id="shapeFill" type="color" value="#ffffff" />
           </label>
-          <label class="tool-setting" data-field="eraser" for="eraserSize">
+          <label class="tool-setting" data-field="eraser" for="eraserSize" hidden>
             <span>Grosor borrador</span>
             <input id="eraserSize" type="number" min="1" max="100" value="20" />
           </label>
