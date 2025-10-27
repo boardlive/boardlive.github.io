@@ -37,8 +37,29 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 let cssHeight = null; // altura del canvas en CSS px
 let cssWidth = null;
+
+function viewportInfo(){
+  const vv = window.visualViewport;
+  if(vv){
+    return {
+      width: Math.round(vv.width || window.innerWidth || canvas?.clientWidth || 0),
+      height: Math.round(vv.height || window.innerHeight || canvas?.clientHeight || 0),
+      scale: vv.scale || 1
+    };
+  }
+  return {
+    width: Math.round(window.innerWidth || canvas?.clientWidth || 0),
+    height: Math.round(window.innerHeight || canvas?.clientHeight || 0),
+    scale: 1
+  };
+}
+
 let lastViewportHeight = null;
 let lastViewportWidth = null;
+let viewportAdjustFrame = null;
+let viewportAdjustTimeout = null;
+let stateRequestTimeout = null;
+let lastGuestViewportSignature = null;
 
 // ===== Canvas escalado HiDPI + altura dinámica =====
 function setCanvasCssHeight(h){
@@ -84,14 +105,17 @@ function headerHeight(){
 }
 
 function desiredCanvasHeight(){
-  const value = Math.round(window.innerHeight - headerHeight());
+  const { height } = viewportInfo();
+  const viewportHeight = Number.isFinite(height) ? height : window.innerHeight;
+  const value = Math.round(viewportHeight - headerHeight());
   return Math.max(200, value);
 }
 
 function syncViewportWithGuests(){
   if(!isHost) return;
   if(typeof cssHeight !== 'number') return;
-  const width = Math.round(canvas.clientWidth || board.clientWidth || window.innerWidth || 0);
+  const { width: viewportWidth } = viewportInfo();
+  const width = Math.round(canvas.clientWidth || board.clientWidth || viewportWidth || window.innerWidth || 0);
   if(width <= 0) return;
   if(lastViewportHeight === cssHeight && lastViewportWidth === width) return;
   lastViewportHeight = cssHeight;
@@ -103,16 +127,29 @@ function expandCanvasToViewport(force=false){
   const target = desiredCanvasHeight();
   const connected = !!(conn && conn.open);
   let next = cssHeight;
-  if(cssHeight === null || force) next = target;
-  else if(isHost) next = target;
-  else if(!connected && typeof cssHeight === 'number' && target > cssHeight) next = target;
-  if(next !== cssHeight){
-    cssHeight = next;
+  if(isHost){
+    if(cssHeight === null || force) next = target;
+    if(next !== cssHeight){
+      cssHeight = next;
+      setCanvasCssHeight(cssHeight);
+      syncViewportWithGuests();
+    } else if(force && cssHeight !== null){
+      setCanvasCssHeight(cssHeight);
+      syncViewportWithGuests();
+    }
+    return;
+  }
+  if(!connected){
+    if(cssHeight === null || force) next = target;
+    else if(typeof cssHeight === 'number' && target > cssHeight) next = target;
+    if(next !== cssHeight){
+      cssHeight = next;
+      setCanvasCssHeight(cssHeight);
+    } else if(force && cssHeight !== null){
+      setCanvasCssHeight(cssHeight);
+    }
+  } else if(force && typeof cssHeight === 'number'){
     setCanvasCssHeight(cssHeight);
-    syncViewportWithGuests();
-  } else if(force && cssHeight !== null){
-    setCanvasCssHeight(cssHeight);
-    syncViewportWithGuests();
   }
 }
 
@@ -448,9 +485,7 @@ function handleFullscreenChange(){
     delete document.body.dataset.boardExpanded;
   }
   updateViewToggle();
-  expandCanvasToViewport(true);
-  adjustGuestView();
-  ensurePagePanelWithinViewport();
+  scheduleViewportAdjust({ force:true });
 }
 
 document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -618,7 +653,7 @@ function serializePages({ refreshActive=false } = {}){
     id: page.id,
     bg: page.bg,
     order: page.order,
-    image: page.image || null
+    image: page.image || (isHost ? canvasSnapshot() : null)
   }));
 }
 
@@ -1145,42 +1180,48 @@ function refreshUi(){
 }
 
 function adjustGuestView(){
+  const { width: viewportWidth, height: rawHeight } = viewportInfo();
+  const baseHeight = Number.isFinite(rawHeight) ? rawHeight : window.innerHeight;
+  const headerH = headerHeight();
+  const availableHeight = Math.max(200, baseHeight - headerH);
+  const availableWidth = viewportWidth || window.innerWidth;
   if(isHost){
     canvasScale = 1;
     canvas.style.transform = '';
     canvas.style.transformOrigin = '';
-    board.style.height = '';
-    board.style.overflow = 'auto';
-    document.body.style.overflow = boardExpanded ? 'hidden' : '';
+    if(boardExpanded){
+      board.style.height = `${availableHeight}px`;
+      board.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      board.style.height = '';
+      board.style.overflow = 'auto';
+      document.body.style.overflow = '';
+    }
     return;
   }
   canvas.style.transform = '';
   canvas.style.transformOrigin = '';
-  const headerH = headerHeight();
-  const availableHeight = Math.max(200, window.innerHeight - headerH);
-  const availableWidth = window.innerWidth;
   const targetHeight = cssHeight || canvas.offsetHeight || availableHeight;
-  const targetWidth = canvas.offsetWidth || availableWidth;
+  const targetWidth = canvas.offsetWidth || availableWidth || canvas.clientWidth;
   let scale = 1;
-  if(targetHeight > 0) scale = Math.min(scale, availableHeight / targetHeight);
-  if(targetWidth > 0) scale = Math.min(scale, availableWidth / targetWidth);
+  if(targetWidth > 0){
+    const widthScale = availableWidth / targetWidth;
+    if(Number.isFinite(widthScale) && widthScale > 0){
+      scale = Math.min(1, widthScale);
+    }
+  }
   if(!Number.isFinite(scale) || scale <= 0) scale = 1;
   canvasScale = scale;
   if(scale < 1){
     canvas.style.transform = `scale(${scale})`;
     canvas.style.transformOrigin = 'top left';
-    board.style.height = `${availableHeight}px`;
-    board.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
   } else {
     canvas.style.transform = '';
-    board.style.height = '';
-    board.style.overflow = 'auto';
-    document.body.style.overflow = '';
   }
-  if(boardExpanded){
-    document.body.style.overflow = 'hidden';
-  }
+  board.style.height = `${availableHeight}px`;
+  board.style.overflow = 'auto';
+  document.body.style.overflow = boardExpanded ? 'hidden' : '';
   if(erasing) updateEraserCursorSize();
 }
 
@@ -1569,10 +1610,85 @@ if(codeInput){
     codeInput.value = sanitizeCode(codeInput.value);
   });
 }
-window.addEventListener('resize', ()=>{
-  expandCanvasToViewport(isHost);
+function handleViewportResize(force=false){
+  expandCanvasToViewport(force || isHost);
   adjustGuestView();
   ensurePagePanelWithinViewport();
+}
+
+function scheduleViewportAdjust({ force=false, debounce=true } = {}){
+  handleViewportResize(force);
+  if(debounce){
+    if(viewportAdjustFrame !== null){
+      cancelAnimationFrame(viewportAdjustFrame);
+      viewportAdjustFrame = null;
+    }
+    viewportAdjustFrame = requestAnimationFrame(()=>{
+      viewportAdjustFrame = null;
+      handleViewportResize(force);
+    });
+    if(viewportAdjustTimeout !== null){
+      clearTimeout(viewportAdjustTimeout);
+      viewportAdjustTimeout = null;
+    }
+    viewportAdjustTimeout = window.setTimeout(()=>{
+      viewportAdjustTimeout = null;
+      handleViewportResize(true);
+    }, 260);
+  }
+  if(!isHost && conn && conn.open){
+    const { width, height } = viewportInfo();
+    if(Number.isFinite(width) && Number.isFinite(height)){
+      const signature = `${width}x${height}`;
+      const changed = signature !== lastGuestViewportSignature;
+      if(changed || force){
+        lastGuestViewportSignature = signature;
+        requestStateRefresh({ immediate: !debounce });
+      }
+    } else if(force){
+      requestStateRefresh({ immediate: !debounce });
+    }
+  }
+}
+
+function requestStateRefresh({ immediate=false } = {}){
+  if(isHost) return;
+  if(!conn || !conn.open) return;
+  if(immediate){
+    cssHeight = null;
+    cssWidth = null;
+  }
+  const send = ()=>{
+    if(!conn || !conn.open) return;
+    try{ conn.send({type:'viewport-info', width: viewportInfo().width, height: viewportInfo().height }); }catch(err){}
+    cssHeight = null;
+    cssWidth = null;
+    try{ conn.send({type:'request-state'}); }catch(err){ console.warn('No se pudo solicitar el estado al anfitrión.', err); }
+  };
+  if(immediate){
+    send();
+    return;
+  }
+  if(stateRequestTimeout !== null) return;
+  stateRequestTimeout = window.setTimeout(()=>{
+    stateRequestTimeout = null;
+    send();
+  }, 160);
+}
+
+window.addEventListener('resize', ()=> scheduleViewportAdjust({ force:false }));
+
+if(window.visualViewport){
+  const visualViewportHandler = ()=>{
+    scheduleViewportAdjust({ force:true });
+  };
+  window.visualViewport.addEventListener('resize', visualViewportHandler);
+  window.visualViewport.addEventListener('scroll', visualViewportHandler);
+}
+
+window.addEventListener('orientationchange', ()=>{
+  scheduleViewportAdjust({ force:true });
+  setTimeout(()=> scheduleViewportAdjust({ force:true, debounce:false }), 320);
 });
 
 function canvasSnapshot(){
@@ -1682,7 +1798,13 @@ function handleIncoming(msg, source){
           setCanvasCssHeight(cssHeight);
           shouldRefresh = true;
         }
-        if(shouldRefresh) refreshUi();
+        if(shouldRefresh){
+          refreshUi();
+          const { width, height } = viewportInfo();
+          if(Number.isFinite(width) && Number.isFinite(height)){
+            lastGuestViewportSignature = `${width}x${height}`;
+          }
+        }
       }
       break;
     case 'viewport':
@@ -1707,10 +1829,17 @@ function handleIncoming(msg, source){
         setActivePage(msg.id, { broadcast:false, fromSync:true });
       }
       break;
-    case 'request-state':
-    case 'hello':
-      if(isHost && source) sendStateTo(source);
-      break;
+case 'request-state':
+case 'hello':
+  if(isHost && source) sendStateTo(source);
+  break;
+case 'viewport-info':
+  if(isHost && source){
+    if(Number.isFinite(msg.width) && Number.isFinite(msg.height)){
+      try{ source.send({type:'viewport', w: msg.width, h: msg.height}); }catch(e){}
+    }
+  }
+  break;
     default:
       break;
   }
@@ -1827,6 +1956,11 @@ function cleanupPeer({ hostState='idle', guestState='idle' } = {}){
   cssWidth = null;
   lastViewportHeight = null;
   lastViewportWidth = null;
+  lastGuestViewportSignature = null;
+  if(stateRequestTimeout !== null){
+    clearTimeout(stateRequestTimeout);
+    stateRequestTimeout = null;
+  }
   applyCanvasWidth();
   applyHostButtonState(hostState);
   applyJoinButtonState(guestState);
