@@ -29,11 +29,21 @@
           <button id="qrBtn" class="btn host-only" title="Mostrar QR de conexión">QR</button>
         </div>
         <div id="section-draw" class="toolbar-section" data-section="draw" role="tabpanel" aria-label="Herramientas de dibujo">
+          <div class="tool-group edit-only" role="group" aria-label="Herramientas de dibujo">
+            <button id="toolFreehand" class="btn tool-btn" type="button" data-tool="pen" aria-pressed="true" title="Trazo libre">✏️ Trazo</button>
+            <button id="toolLine" class="btn tool-btn" type="button" data-tool="line" title="Dibujar línea recta">➖ Línea</button>
+            <button id="toolRect" class="btn tool-btn" type="button" data-tool="rect" title="Dibujar rectángulo">⬛ Rectángulo</button>
+            <button id="toolEllipse" class="btn tool-btn" type="button" data-tool="ellipse" title="Dibujar círculo o elipse">⚪ Círculo</button>
+            <button id="toolHighlight" class="btn tool-btn" type="button" data-tool="highlight" title="Resaltador semitransparente">🟡 Resaltador</button>
+          </div>
           <label class="edit-only">Color <input id="color" type="color" value="#000000" /></label>
           <label class="edit-only">Grosor <input id="size" type="number" min="1" max="50" value="4" style="width:4.5rem"/></label>
           <label class="edit-only">Grosor borrador <input id="eraserSize" type="number" min="1" max="100" value="20" style="width:4.5rem"/></label>
           <button id="eraser" class="btn edit-only">Borrador</button>
+          <button id="undo" class="btn host-only" type="button" title="Deshacer último trazo">↩️ Deshacer</button>
+          <button id="redo" class="btn host-only" type="button" title="Rehacer">↪️ Rehacer</button>
           <button id="clear" class="btn host-only">Limpiar</button>
+          <button id="insertImage" class="btn host-only" type="button" title="Insertar imagen">🖼️ Imagen</button>
           <label class="host-only">Fondo <input id="bg" type="color" value="#ffffff" /></label>
         </div>
         <div id="section-options" class="toolbar-section" data-section="options" role="tabpanel" aria-label="Otras opciones">
@@ -43,6 +53,7 @@
           <label class="host-only"><input id="lockGuests" type="checkbox"/> Solo anfitrión dibuja</label>
         </div>
         <input id="pdfInput" class="host-only" type="file" accept="application/pdf" style="display:none" />
+        <input id="imageInput" class="host-only" type="file" accept="image/*" style="display:none" />
       </div>
       <div class="header-pages">
         <button id="pageToggle" class="btn host-only" type="button" aria-expanded="false" aria-controls="pagePanel" title="Mostrar páginas">🗂️ Páginas</button>
