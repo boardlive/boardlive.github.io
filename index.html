@@ -29,22 +29,18 @@
           <button id="qrBtn" class="btn host-only" title="Mostrar QR de conexión">QR</button>
         </div>
         <div id="section-draw" class="toolbar-section" data-section="draw" role="tabpanel" aria-label="Herramientas de dibujo">
-          <div class="tool-group edit-only" role="group" aria-label="Herramientas de dibujo">
-            <button id="toolFreehand" class="btn tool-btn" type="button" data-tool="pen" aria-pressed="true" title="Trazo libre">✏️ Trazo</button>
-            <button id="toolLine" class="btn tool-btn" type="button" data-tool="line" title="Dibujar línea recta">➖ Línea</button>
-            <button id="toolRect" class="btn tool-btn" type="button" data-tool="rect" title="Dibujar rectángulo">⬛ Rectángulo</button>
-            <button id="toolEllipse" class="btn tool-btn" type="button" data-tool="ellipse" title="Dibujar círculo o elipse">⚪ Círculo</button>
-            <button id="toolHighlight" class="btn tool-btn" type="button" data-tool="highlight" title="Resaltador semitransparente">🟡 Resaltador</button>
+          <div class="draw-toolbar edit-only" role="group" aria-label="Controles principales de dibujo">
+            <div class="draw-toolbar-actions">
+              <button id="toolSettingsToggle" class="btn tool-trigger" type="button" aria-expanded="false" aria-controls="toolSettingsPanel" title="Seleccionar herramienta">✏️ Trazo libre</button>
+              <button id="eraser" class="btn" type="button">Borrador</button>
+              <div class="draw-toolbar-divider" aria-hidden="true"></div>
+              <button id="undo" class="btn host-only" type="button" title="Deshacer último trazo">↩️ Deshacer</button>
+              <button id="redo" class="btn host-only" type="button" title="Rehacer">↪️ Rehacer</button>
+              <button id="clear" class="btn host-only" type="button">Limpiar</button>
+              <button id="insertImage" class="btn host-only" type="button" title="Insertar imagen">🖼️ Imagen</button>
+              <button id="viewToggle" class="btn view-toggle" type="button" aria-pressed="false" title="Maximizar área de dibujo">⛶ Maximizar</button>
+            </div>
           </div>
-          <label class="edit-only">Color <input id="color" type="color" value="#000000" /></label>
-          <label class="edit-only">Grosor <input id="size" type="number" min="1" max="50" value="4" style="width:4.5rem"/></label>
-          <label class="edit-only">Grosor borrador <input id="eraserSize" type="number" min="1" max="100" value="20" style="width:4.5rem"/></label>
-          <button id="eraser" class="btn edit-only">Borrador</button>
-          <button id="undo" class="btn host-only" type="button" title="Deshacer último trazo">↩️ Deshacer</button>
-          <button id="redo" class="btn host-only" type="button" title="Rehacer">↪️ Rehacer</button>
-          <button id="clear" class="btn host-only">Limpiar</button>
-          <button id="insertImage" class="btn host-only" type="button" title="Insertar imagen">🖼️ Imagen</button>
-          <label class="host-only">Fondo <input id="bg" type="color" value="#ffffff" /></label>
         </div>
         <div id="section-options" class="toolbar-section" data-section="options" role="tabpanel" aria-label="Otras opciones">
           <button id="openPdf" class="btn host-only" type="button" title="Abrir un PDF y añadir sus páginas">Abrir PDF</button>
@@ -60,8 +56,50 @@
       </div>
       <span id="status">sin conexión</span>
     </header>
+    <div id="toolSettingsPanel" class="tool-settings-popover edit-only" aria-live="polite" data-open="false" aria-hidden="true">
+      <div class="tool-settings-head">
+        <div class="tool-settings-heading">
+          <strong id="toolSettingsTitle">Trazo libre</strong>
+          <span id="toolSettingsHint">Ajusta las propiedades de la herramienta seleccionada</span>
+        </div>
+        <button id="toolSettingsClose" class="btn icon-btn" type="button" aria-label="Cerrar ajustes">✕</button>
+      </div>
+      <div class="tool-settings-tabs" role="tablist" aria-label="Herramientas disponibles">
+        <button class="btn tool-btn" type="button" data-tool="pen" aria-selected="true" title="Trazo libre">✏️ Trazo</button>
+        <button class="btn tool-btn" type="button" data-tool="line" aria-selected="false" title="Dibujar línea recta">➖ Línea</button>
+        <button class="btn tool-btn" type="button" data-tool="rect" aria-selected="false" title="Dibujar rectángulo">⬛ Rectángulo</button>
+        <button class="btn tool-btn" type="button" data-tool="ellipse" aria-selected="false" title="Dibujar círculo o elipse">⚪ Círculo</button>
+        <button class="btn tool-btn" type="button" data-tool="highlight" aria-selected="false" title="Resaltador semitransparente">🟡 Resaltador</button>
+        <button class="btn tool-tab host-only" type="button" data-tab="page" aria-selected="false" title="Opciones de la página">📄 Página</button>
+      </div>
+      <div class="tool-settings-content">
+        <div class="tool-settings-grid" data-pane="tool">
+          <label class="tool-setting" data-field="stroke" for="color">
+            <span id="strokeLabel">Color del trazo</span>
+            <input id="color" type="color" value="#000000" />
+          </label>
+          <label class="tool-setting" data-field="size" for="size">
+            <span id="sizeLabel">Grosor (px)</span>
+            <input id="size" type="number" min="1" max="100" value="4" />
+          </label>
+          <label class="tool-setting" data-field="fill" id="fillSetting" for="shapeFill" hidden>
+            <span id="fillLabel">Relleno</span>
+            <input id="shapeFill" type="color" value="#ffffff" />
+          </label>
+          <label class="tool-setting" data-field="eraser" for="eraserSize">
+            <span>Grosor borrador</span>
+            <input id="eraserSize" type="number" min="1" max="100" value="20" />
+          </label>
+        </div>
+        <div class="tool-settings-grid host-only" data-pane="page" hidden>
+          <label class="tool-setting" data-field="bg" for="bg">
+            <span>Fondo de la página</span>
+            <input id="bg" type="color" value="#ffffff" />
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="board" id="board">
-      <button id="viewToggle" class="view-toggle" type="button" aria-pressed="false" title="Maximizar área de dibujo">⛶ Maximizar</button>
       <canvas id="canvas" style="height: calc(100vh - 56px);"></canvas>
       <div id="eraserCursor" aria-hidden="true"></div>
     </div>
