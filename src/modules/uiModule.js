@@ -523,6 +523,7 @@ export function initUiModule({
         if (!ok) throw new Error('Clipboard copy failed');
       }
       showCopyFeedback('Enlace copiado');
+      window.setTimeout(() => hideQr(), 600);
     } catch (err) {
       console.error(err);
       showCopyFeedback('No se pudo copiar', { error: true });
