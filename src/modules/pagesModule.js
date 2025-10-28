@@ -512,39 +512,42 @@ export function initPagesModule({
 
   function applyPageToCanvas(page) {
     if (!page) {
-      clearCanvas();
       applyBackgroundColor('#ffffff', false);
-      return;
+      clearCanvas();
+      return Promise.resolve(false);
     }
     applyBackgroundColor(page.bg || '#ffffff', false);
     if (page.image) {
-      applySnapshot(page.image);
-    } else {
-      clearCanvas();
+      return applySnapshot(page.image);
     }
+    clearCanvas();
+    return Promise.resolve(true);
   }
 
   function setActivePage(id, { broadcast: shouldBroadcast = true, fromSync = false } = {}) {
-    if (!id) return;
+    if (!id) return Promise.resolve(false);
     finalizeActiveImageIfPresent();
     if (pagesState.activePageId === id && !fromSync) {
       if (sessionState.isHost && shouldBroadcast) broadcastPages();
-      return;
+      return Promise.resolve(true);
     }
     if (sessionState.isHost && !fromSync) {
       saveCurrentPageState();
     }
     const page = pages.find(p => p.id === id);
-    if (!page) return;
+    if (!page) return Promise.resolve(false);
     pagesState.activePageId = id;
-    applyPageToCanvas(page);
+    const renderPromise = Promise.resolve(applyPageToCanvas(page));
     resetHistory();
     renderPageThumbnails({ force: true });
     if (sessionState.isHost && shouldBroadcast) {
-      broadcastPages();
-      broadcastPageChange(pagesState.activePageId);
-      syncViewportWithGuests();
+      renderPromise.then(() => {
+        broadcastPages();
+        broadcastPageChange(pagesState.activePageId);
+        syncViewportWithGuests();
+      });
     }
+    return renderPromise;
   }
 
   function addNewPage({ bg, image } = {}) {
@@ -555,11 +558,12 @@ export function initPagesModule({
     const currentIndex = findPageIndex(pagesState.activePageId);
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : pages.length;
     pages.splice(insertAt, 0, newPage);
-    setActivePage(newPage.id, { broadcast: false });
-    renderPageThumbnails();
+    const renderPromise = setActivePage(newPage.id, { broadcast: false });
     if (sessionState.isHost) {
-      broadcastPages();
-      broadcastPageChange(pagesState.activePageId);
+      Promise.resolve(renderPromise).then(() => {
+        broadcastPages();
+        broadcastPageChange(pagesState.activePageId);
+      });
     }
   }
 
@@ -581,11 +585,13 @@ export function initPagesModule({
       const next = pages[index] ?? pages[index - 1] ?? pages[0];
       pagesState.activePageId = next.id;
     }
-    applyPageToCanvas(getActivePage());
+    const renderPromise = applyPageToCanvas(getActivePage());
     renderPageThumbnails();
     if (sessionState.isHost) {
-      broadcastPages();
-      broadcastPageChange(pagesState.activePageId);
+      Promise.resolve(renderPromise).then(() => {
+        broadcastPages();
+        broadcastPageChange(pagesState.activePageId);
+      });
     }
   }
 
@@ -940,4 +946,3 @@ export function initPagesModule({
     exitBoardFullscreen
   };
 }
-
