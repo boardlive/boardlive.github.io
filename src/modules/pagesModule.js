@@ -68,7 +68,10 @@ export function initPagesModule({
     syncViewportWithGuests = noop
   } = canvasApi;
 
-  const { broadcast = noop } = networkApi;
+  const {
+    broadcast = noop,
+    requestPageAdd = noop
+  } = networkApi;
   const {
     onPagePanelToggle = noop,
     onViewToggle = noop,
@@ -562,8 +565,18 @@ export function initPagesModule({
   }
 
   function addNewPage({ bg, image } = {}) {
+    const targetBg =
+      typeof bg === 'string' ? bg : uiState.currentBackground;
+    if (!sessionState.isHost) {
+      requestPageAdd({
+        afterId: pagesState.activePageId,
+        bg: targetBg,
+        image
+      });
+      return;
+    }
     finalizeActiveImageIfPresent();
-    const baseBg = typeof bg === 'string' ? bg : uiState.currentBackground;
+    const baseBg = targetBg;
     if (sessionState.isHost) saveCurrentPageState();
     const newPage = createPage({ bg: baseBg, image });
     const currentIndex = findPageIndex(pagesState.activePageId);

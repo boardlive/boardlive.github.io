@@ -75,7 +75,8 @@ const pagesModule = initPagesModule({
   domRefs,
   canvasApi: canvasModule,
   networkApi: {
-    broadcast: (...args) => networkModule?.broadcast(...args)
+    broadcast: (...args) => networkModule?.broadcast(...args),
+    requestPageAdd: (...args) => networkModule?.requestPageAdd(...args)
   },
   uiApi: {
     onViewToggle: () => uiModule?.updateViewToggle(),
@@ -95,7 +96,8 @@ const {
   setPagePanelOpen,
   syncPagesFromHost,
   enterBoardFullscreen,
-  exitBoardFullscreen
+  exitBoardFullscreen,
+  addNewPage
 } = pagesModule;
 
 uiModule = initUiModule({
@@ -143,6 +145,7 @@ networkModule = initNetworkModule({
     renderPageThumbnails,
     schedulePageSnapshot,
     serializePages,
+    addNewPage,
     setActivePage,
     syncPagesFromHost
   },

@@ -64,6 +64,7 @@ export function initNetworkModule({
     renderPageThumbnails = noop,
     schedulePageSnapshot = noop,
     serializePages = () => [],
+    addNewPage = noop,
     setActivePage = noop,
     syncPagesFromHost = noop
   } = pagesApi;
@@ -256,6 +257,37 @@ export function initNetworkModule({
       } catch (err) {
         console.warn('No se pudo enviar el evento clear.', err);
       }
+    }
+  }
+
+  function requestPageAdd({
+    afterId = null,
+    bg = uiState.currentBackground,
+    image = null
+  } = {}) {
+    if (sessionState.isHost) {
+      addNewPage({
+        bg,
+        image: typeof image === 'string' ? image : undefined
+      });
+      return;
+    }
+    if (!sessionState.conn || !sessionState.conn.open) return;
+    const payload = {
+      type: 'page-add',
+      after:
+        typeof afterId === 'string' ? afterId : pagesState.activePageId
+    };
+    if (typeof bg === 'string') {
+      payload.bg = bg;
+    }
+    if (typeof image === 'string' && image.startsWith('data:')) {
+      payload.image = image;
+    }
+    try {
+      sessionState.conn.send(payload);
+    } catch (err) {
+      console.warn('No se pudo solicitar al anfitrión una nueva página.', err);
     }
   }
 
@@ -735,6 +767,35 @@ export function initNetworkModule({
           syncPagesFromHost(pages, msg.active);
         }
         break;
+      case 'page-add':
+        if (sessionState.isHost && source) {
+          const entry = getGuestEntry(source.peer);
+          if (!entry || !entry.canDraw) break;
+          const targetBg =
+            typeof msg.bg === 'string' ? msg.bg : uiState.currentBackground;
+          const targetImage =
+            typeof msg.image === 'string' && msg.image.startsWith('data:')
+              ? msg.image
+              : null;
+          const targetPageId =
+            typeof msg.after === 'string' ? msg.after : pagesState.activePageId;
+          const ensureTargetPage =
+            targetPageId && pagesState.activePageId !== targetPageId
+              ? Promise.resolve(
+                  setActivePage(targetPageId, {
+                    broadcast: false,
+                    fromSync: true
+                  })
+                ).catch(() => false)
+              : Promise.resolve(true);
+          ensureTargetPage.then(() => {
+            addNewPage({
+              bg: targetBg,
+              image: targetImage || undefined
+            });
+          });
+        }
+        break;
       case 'page-change':
         if (!sessionState.isHost && msg?.id) {
           setActivePage(msg.id, { broadcast: false, fromSync: true });
@@ -1020,6 +1081,7 @@ export function initNetworkModule({
     broadcastViewport,
     requestStateRefresh,
     requestUndo,
-    requestRedo
+    requestRedo,
+    requestPageAdd
   };
 }
