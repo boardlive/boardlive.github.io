@@ -123,6 +123,13 @@ export function initUiModule({
     sizeInput,
     fillInput,
     buttons.eraser,
+    buttons.clear,
+    buttons.undo,
+    buttons.redo,
+    buttons.pageToggle,
+    buttons.pageAdd,
+    buttons.pagePrev,
+    buttons.pageNext,
     eraserSizeInput,
     ...toolButtons
   ].filter(Boolean);
@@ -476,9 +483,13 @@ export function initUiModule({
         ? 'Modo anfitrión:'
         : 'Modo invitado:';
     }
-    if (!sessionState.isHost) setPagePanelOpen(false);
+    const shouldHidePagePanel =
+      !sessionState.isHost &&
+      (!guestConnected || sessionState.remoteLock);
+    if (shouldHidePagePanel) setPagePanelOpen(false);
     if (
       !sessionState.isHost &&
+      (!guestConnected || sessionState.remoteLock) &&
       toolsState.toolSettingsPane === 'page'
     ) {
       setToolSettingsPane('tool');

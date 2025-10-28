@@ -34,10 +34,10 @@
             <div class="draw-toolbar-actions">
               <button id="toolSettingsToggle" class="btn tool-trigger" type="button" aria-expanded="false" aria-controls="toolSettingsPanel" title="Seleccionar herramienta">✏️ Trazo libre</button>
               <button id="eraser" class="btn" type="button">Borrador</button>
+              <button id="clear" class="btn" type="button">Limpiar</button>
               <div class="draw-toolbar-divider" aria-hidden="true"></div>
-              <button id="undo" class="btn host-only" type="button" title="Deshacer último trazo">↩️ Deshacer</button>
-              <button id="redo" class="btn host-only" type="button" title="Rehacer">↪️ Rehacer</button>
-              <button id="clear" class="btn host-only" type="button">Limpiar</button>
+              <button id="undo" class="btn" type="button" title="Deshacer último trazo">↩️ Deshacer</button>
+              <button id="redo" class="btn" type="button" title="Rehacer">↪️ Rehacer</button>
               <button id="insertImage" class="btn host-only" type="button" title="Insertar imagen">🖼️ Imagen</button>
               <button id="viewToggle" class="btn view-toggle" type="button" aria-pressed="false" title="Maximizar área de dibujo">⛶ Maximizar</button>
             </div>
@@ -61,7 +61,7 @@
         <input id="imageInput" class="host-only" type="file" accept="image/*" style="display:none" />
       </div>
       <div class="header-pages">
-        <button id="pageToggle" class="btn host-only" type="button" aria-expanded="false" aria-controls="pagePanel" title="Mostrar páginas">🗂️ Páginas</button>
+        <button id="pageToggle" class="btn edit-only" type="button" aria-expanded="false" aria-controls="pagePanel" title="Mostrar páginas">🗂️ Páginas</button>
       </div>
       <div id="status" class="status-indicator" data-state="disconnected">
         <button id="statusToggle" class="btn status-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Ver conexiones">
@@ -128,7 +128,7 @@
       <div id="eraserCursor" aria-hidden="true"></div>
     </div>
   </div>
-  <div id="pagePanel" class="page-panel host-only" role="dialog" aria-modal="false" aria-label="Páginas de la pizarra" hidden>
+  <div id="pagePanel" class="page-panel edit-only" role="dialog" aria-modal="false" aria-label="Páginas de la pizarra" hidden>
     <div class="page-panel-head">
       <strong>Páginas</strong>
       <button id="pageClose" class="btn" type="button" title="Ocultar panel">Cerrar</button>
