@@ -470,6 +470,7 @@ export function initUiModule({
         ? 'host'
         : 'guest';
     }
+    board?.classList.toggle('guest-view', !sessionState.isHost);
     if (roleLabel) {
       roleLabel.textContent = sessionState.isHost
         ? 'Modo anfitrión:'
