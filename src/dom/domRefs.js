@@ -37,7 +37,8 @@ export function collectDomRefs() {
       fillTransparent: byId('shapeFillTransparent'),
       background: byId('bg'),
       code: byId('code'),
-      lockGuests: byId('lockGuests'),
+      guestAllowAll: byId('guestAllowAll'),
+      guestSelfName: byId('guestSelfName'),
       pdfFile: byId('pdfInput'),
       imageFile: byId('imageInput')
     },
@@ -64,7 +65,10 @@ export function collectDomRefs() {
       toolSettingsToggle: byId('toolSettingsToggle'),
       toolSettingsClose: byId('toolSettingsClose'),
       toolSettingsPin: byId('toolSettingsPin'),
-      toolSettingsReset: byId('toolSettingsReset')
+      toolSettingsReset: byId('toolSettingsReset'),
+      statusToggle: byId('statusToggle'),
+      guestPanelClose: byId('guestPanelClose'),
+      guestRequest: byId('guestRequestBtn')
     },
     labels: {
       stroke: byId('strokeLabel'),
@@ -74,6 +78,9 @@ export function collectDomRefs() {
     },
     panels: {
       pagePanel,
+      guestPanel: byId('guestPanel'),
+      guestHostView: byId('guestHostView'),
+      guestSelfView: byId('guestSelfView'),
       toolbarControls: byId('toolbarControls'),
       toolSettingsToolPane:
         toolSettingsPanel?.querySelector('[data-pane="tool"]') ?? null,
@@ -103,7 +110,12 @@ export function collectDomRefs() {
     },
     misc: {
       codeWrapper: byId('codeWrapper'),
-      eraserCursor: byId('eraserCursor')
+      eraserCursor: byId('eraserCursor'),
+      statusText: byId('statusText'),
+      guestList: byId('guestList'),
+      guestEmpty: byId('guestEmpty'),
+      guestPanelTitle: byId('guestPanelTitle'),
+      guestRequestHint: byId('guestRequestHint')
     }
   };
 }

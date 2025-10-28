@@ -46,7 +46,6 @@
         <div id="section-options" class="toolbar-section" data-section="options" role="tabpanel" aria-label="Otras opciones">
           <button id="openPdf" class="btn host-only" type="button" title="Abrir un PDF y añadir sus páginas">Abrir PDF</button>
           <button id="savePdf" class="btn host-only" title="Guardar como PDF">Guardar PDF</button>
-          <label class="host-only"><input id="lockGuests" type="checkbox"/> Solo anfitrión dibuja</label>
         </div>
         <input id="pdfInput" class="host-only" type="file" accept="application/pdf" style="display:none" />
         <input id="imageInput" class="host-only" type="file" accept="image/*" style="display:none" />
@@ -54,7 +53,11 @@
       <div class="header-pages">
         <button id="pageToggle" class="btn host-only" type="button" aria-expanded="false" aria-controls="pagePanel" title="Mostrar páginas">🗂️ Páginas</button>
       </div>
-      <span id="status">sin conexión</span>
+      <div id="status" class="status-indicator" data-state="disconnected">
+        <button id="statusToggle" class="btn status-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Ver conexiones">
+          <span id="statusText">sin conexión</span>
+        </button>
+      </div>
     </header>
     <div id="toolSettingsPanel" class="tool-settings-popover edit-only" aria-live="polite" data-open="false" aria-hidden="true">
       <div class="tool-settings-head">
@@ -126,6 +129,31 @@
       <button id="pageAdd" class="btn" type="button" title="Añadir una página nueva">➕ Añadir</button>
     </div>
     <div id="pageThumbnails" class="page-thumbnails" role="listbox" aria-label="Miniaturas de páginas"></div>
+  </div>
+
+  <div id="guestPanel" class="guest-panel" role="dialog" aria-modal="false" aria-labelledby="guestPanelTitle" hidden>
+    <div class="guest-panel-head">
+      <strong id="guestPanelTitle">Conexiones</strong>
+      <div class="guest-panel-actions">
+        <button id="guestPanelClose" class="btn icon-btn" type="button" aria-label="Cerrar panel de invitados">✕</button>
+      </div>
+    </div>
+    <div id="guestHostView" class="guest-panel-body" hidden>
+      <label class="guest-toggle-all">
+        <input id="guestAllowAll" type="checkbox" />
+        <span>Permitir que todos dibujen</span>
+      </label>
+      <div id="guestList" class="guest-list" role="group" aria-label="Invitados conectados"></div>
+      <p id="guestEmpty" class="guest-empty" hidden>Sin invitados conectados.</p>
+    </div>
+    <div id="guestSelfView" class="guest-panel-body" hidden>
+      <label class="guest-self-field">
+        <span>Mi nombre</span>
+        <input id="guestSelfName" type="text" maxlength="48" placeholder="Escribe tu nombre" />
+      </label>
+      <button id="guestRequestBtn" class="btn guest-request-btn" type="button">Pedir permiso para dibujar</button>
+      <p id="guestRequestHint" class="guest-request-hint">Actualmente estás en modo lectura.</p>
+    </div>
   </div>
 
   <!-- QR modal -->

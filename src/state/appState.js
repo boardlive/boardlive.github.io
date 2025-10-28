@@ -3,6 +3,10 @@ export const appState = {
     peer: null,
     conn: null,
     guests: new Map(),
+    guestCounter: 0,
+    guestAccessMode: 'host-only',
+    guestName: '',
+    guestRequestPending: false,
     isHost: false,
     guestLock: true,
     remoteLock: false,
@@ -74,7 +78,8 @@ export const appState = {
     boardExpanded: false,
     activeSection: 'session',
     qrInstance: null,
-    currentBackground: '#ffffff'
+    currentBackground: '#ffffff',
+    guestPanelOpen: false
   },
   images: {
     activeImageOverlay: null,

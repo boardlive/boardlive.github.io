@@ -153,7 +153,8 @@ networkModule = initNetworkModule({
     applyHostButtonState: (...args) => uiModule.applyHostButtonState(...args),
     applyJoinButtonState: (...args) => uiModule.applyJoinButtonState(...args),
     updateShareLinkUi: (...args) => uiModule.updateShareLinkUi(...args),
-    hideQr: (...args) => uiModule.hideQr(...args)
+    hideQr: (...args) => uiModule.hideQr(...args),
+    updateGuestRoster: (...args) => uiModule.updateGuestRoster(...args)
   }
 });
 
@@ -161,7 +162,11 @@ uiModule.registerNetworkApi({
   broadcast: (...args) => networkModule.broadcast(...args),
   startHost: (...args) => networkModule.startHost(...args),
   startGuest: (...args) => networkModule.startGuest(...args),
-  cleanupPeer: (...args) => networkModule.cleanupPeer(...args)
+  cleanupPeer: (...args) => networkModule.cleanupPeer(...args),
+  setGuestAccessMode: (...args) => networkModule.setGuestAccessMode(...args),
+  setGuestCanDraw: (...args) => networkModule.setGuestCanDraw(...args),
+  sendGuestName: (...args) => networkModule.sendGuestName(...args),
+  setGuestRequestState: (...args) => networkModule.setGuestRequestState(...args)
 });
 
 setCurrentTool('pen', { silent: true });

@@ -49,7 +49,8 @@ export function initUiModule({
     fill: fillInput,
     background: bgInput,
     code: codeInput,
-    lockGuests: lockToggle,
+    guestAllowAll: guestAllowAllInput,
+    guestSelfName: guestSelfNameInput,
     imageFile: imageInput
   } = inputs;
 
@@ -63,14 +64,17 @@ export function initUiModule({
     menuToggle: menuToggleBtn,
     undo: undoBtn,
     redo: redoBtn,
-    insertImage: insertImageBtn
+    insertImage: insertImageBtn,
+    statusToggle,
+    guestPanelClose,
+    guestRequest: guestRequestBtn
   } = buttons;
 
   const {
     role: roleLabel
   } = labels;
 
-  const { toolbarControls } = panels;
+  const { toolbarControls, guestPanel, guestHostView, guestSelfView } = panels;
 
   const {
     overlay: qrOverlay,
@@ -79,7 +83,14 @@ export function initUiModule({
     copyFeedback: copyUrlFeedback
   } = qrDom;
 
-  const { codeWrapper } = misc;
+  const {
+    codeWrapper,
+    statusText,
+    guestList,
+    guestEmpty,
+    guestPanelTitle,
+    guestRequestHint
+  } = misc;
 
   const {
     setToolSettingsPane = noop,
@@ -152,7 +163,11 @@ export function initUiModule({
     broadcast: noop,
     startHost: noop,
     startGuest: noop,
-    cleanupPeer: noop
+    cleanupPeer: noop,
+    setGuestAccessMode: noop,
+    setGuestCanDraw: noop,
+    sendGuestName: noop,
+    setGuestRequestState: noop
   };
 
   function registerNetworkApi(api = {}) {
@@ -164,12 +179,38 @@ export function initUiModule({
       typeof api.startGuest === 'function' ? api.startGuest : noop;
     networkApiRef.cleanupPeer =
       typeof api.cleanupPeer === 'function' ? api.cleanupPeer : noop;
+    networkApiRef.setGuestAccessMode =
+      typeof api.setGuestAccessMode === 'function'
+        ? api.setGuestAccessMode
+        : noop;
+    networkApiRef.setGuestCanDraw =
+      typeof api.setGuestCanDraw === 'function'
+        ? api.setGuestCanDraw
+        : noop;
+    networkApiRef.sendGuestName =
+      typeof api.sendGuestName === 'function' ? api.sendGuestName : noop;
+    networkApiRef.setGuestRequestState =
+      typeof api.setGuestRequestState === 'function'
+        ? api.setGuestRequestState
+        : noop;
   }
 
+  let guestRosterState = {
+    total: 0,
+    guests: [],
+    mode: 'host-only',
+    guestLock: true
+  };
+  let suppressGuestControlsSync = false;
+
   function setStatus(text, state = 'disconnected') {
-    if (!statusEl) return;
-    statusEl.textContent = text;
-    statusEl.dataset.state = state;
+    if (statusText) statusText.textContent = text;
+    if (statusToggle) {
+      const actionLabel = `${text} - Ver conexiones`;
+      statusToggle.setAttribute('aria-label', actionLabel);
+      statusToggle.title = actionLabel;
+    }
+    if (statusEl) statusEl.dataset.state = state;
   }
 
   function updateCodeInputVisibility() {
@@ -241,17 +282,6 @@ export function initUiModule({
     else joinBtn.removeAttribute('disabled');
     if (cfg.ariaBusy) joinBtn.setAttribute('aria-busy', 'true');
     else joinBtn.removeAttribute('aria-busy');
-  }
-
-  function updateLockToggle() {
-    if (!lockToggle) return;
-    lockToggle.disabled = !sessionState.isHost;
-    lockToggle.checked = sessionState.isHost
-      ? sessionState.guestLock
-      : sessionState.remoteLock;
-    lockToggle.title = sessionState.isHost
-      ? 'Impide que los invitados dibujen o borren la pizarra'
-      : 'Solo el anfitrión puede cambiar esta opción';
   }
 
   function updateGuestControls() {
@@ -581,8 +611,264 @@ export function initUiModule({
     hideCopyFeedback();
   }
 
+  function updateGuestPanelView() {
+    if (!guestPanel) return;
+    const isHost = sessionState.isHost;
+    if (guestPanelTitle) {
+      guestPanelTitle.textContent = isHost
+        ? 'Invitados conectados'
+        : 'Mi conexión';
+    }
+    if (guestHostView) guestHostView.hidden = !isHost;
+    if (guestSelfView) guestSelfView.hidden = isHost;
+  }
+
+  function renderGuestRoster() {
+    updateGuestPanelView();
+    if (!sessionState.isHost) {
+      if (guestHostView) guestHostView.hidden = true;
+      if (statusEl) delete statusEl.dataset.alert;
+      return;
+    }
+    if (!guestList) return;
+
+    const list = Array.isArray(guestRosterState.guests)
+      ? guestRosterState.guests
+      : [];
+    const mode = guestRosterState.mode || 'host-only';
+    const allowAll = mode === 'all';
+    const hasRequests = list.some(guest => guest.requesting);
+    const orderedList = list
+      .slice()
+      .sort((a, b) => {
+        if (!!a.requesting === !!b.requesting) {
+          return a.index - b.index;
+        }
+        return a.requesting ? -1 : 1;
+      });
+
+    if (statusEl) {
+      if (hasRequests) statusEl.dataset.alert = 'true';
+      else delete statusEl.dataset.alert;
+    }
+
+    if (guestEmpty) {
+      guestEmpty.hidden = list.length !== 0;
+    }
+
+    if (guestAllowAllInput) {
+      suppressGuestControlsSync = true;
+      guestAllowAllInput.checked = allowAll;
+      guestAllowAllInput.disabled = !sessionState.isHost || list.length === 0;
+      suppressGuestControlsSync = false;
+    }
+
+    guestList.innerHTML = '';
+
+    const fragment = document.createDocumentFragment();
+    orderedList.forEach(guest => {
+      const row = document.createElement('div');
+      row.className = 'guest-row';
+      row.dataset.guestId = guest.id;
+      row.dataset.index = guest.index;
+      if (!guest.canDraw) {
+        row.classList.add('guest-row-locked');
+      }
+      if (guest.requesting) {
+        row.classList.add('guest-row-request');
+      }
+
+      const title = document.createElement('div');
+      title.className = 'guest-row-title';
+      title.textContent = guest.displayName || guest.defaultName;
+      row.appendChild(title);
+
+      if (guest.requesting) {
+        const badge = document.createElement('span');
+        badge.className = 'guest-request-badge';
+        badge.textContent = 'Solicitud de edición';
+        row.appendChild(badge);
+      }
+
+      const controls = document.createElement('div');
+      controls.className = 'guest-row-controls';
+
+      const permissionLabel = document.createElement('label');
+      permissionLabel.className = 'guest-permission-toggle';
+      const permissionInput = document.createElement('input');
+      permissionInput.type = 'checkbox';
+      permissionInput.className = 'guest-can-draw';
+      permissionInput.dataset.guestId = guest.id;
+      permissionInput.checked = !!guest.canDraw;
+      permissionInput.disabled = allowAll;
+      permissionInput.setAttribute(
+        'aria-label',
+        guest.canDraw
+          ? `Desactivar permisos de dibujo para ${guest.defaultName}`
+          : `Permitir dibujar a ${guest.defaultName}`
+      );
+      if (!allowAll) {
+        permissionInput.addEventListener('change', handleGuestPermissionChange);
+      }
+      permissionLabel.appendChild(permissionInput);
+      const permissionText = document.createElement('span');
+      permissionText.textContent = guest.canDraw
+        ? 'Puede dibujar'
+        : 'Solo lectura';
+      permissionLabel.appendChild(permissionText);
+      controls.appendChild(permissionLabel);
+
+      row.appendChild(controls);
+      fragment.appendChild(row);
+    });
+
+    guestList.appendChild(fragment);
+  }
+
+  function renderGuestSelfPanel() {
+    updateGuestPanelView();
+    if (sessionState.isHost) return;
+
+    const connected = !!(sessionState.conn && sessionState.conn.open);
+    const canDraw = !sessionState.remoteLock && connected;
+    const requesting = !!sessionState.guestRequestPending && !canDraw;
+
+    if (guestSelfView) guestSelfView.hidden = false;
+    if (guestHostView) guestHostView.hidden = true;
+    if (statusEl) delete statusEl.dataset.alert;
+
+    if (guestSelfNameInput) {
+      const target = sessionState.guestName || '';
+      if (guestSelfNameInput.value !== target) {
+        guestSelfNameInput.value = target;
+      }
+    }
+
+    if (guestRequestBtn) {
+      guestRequestBtn.classList.toggle('pending', requesting);
+      guestRequestBtn.classList.toggle('granted', canDraw);
+      if (!connected) {
+        guestRequestBtn.disabled = true;
+        guestRequestBtn.textContent = 'Conéctate para solicitar edición';
+      } else if (canDraw) {
+        guestRequestBtn.disabled = true;
+        guestRequestBtn.textContent = 'Ya puedes dibujar';
+      } else {
+        guestRequestBtn.disabled = false;
+        guestRequestBtn.textContent = requesting
+          ? 'Cancelar solicitud'
+          : 'Pedir permiso para dibujar';
+      }
+    }
+
+    if (guestRequestHint) {
+      if (!connected) {
+        guestRequestHint.textContent = 'No estás conectado a ninguna pizarra.';
+      } else if (canDraw) {
+        guestRequestHint.textContent = 'Ya tienes permiso para editar la pizarra.';
+      } else if (requesting) {
+        guestRequestHint.textContent = 'Solicitud enviada. Espera a que el anfitrión la acepte.';
+      } else {
+        guestRequestHint.textContent = 'Actualmente estás en modo lectura.';
+      }
+    }
+  }
+
+  function updateGuestRoster(snapshot = {}) {
+    guestRosterState = {
+      total: Number.isFinite(snapshot.total) ? snapshot.total : 0,
+      guests: Array.isArray(snapshot.guests) ? snapshot.guests : [],
+      mode: snapshot.mode || 'host-only',
+      guestLock: typeof snapshot.guestLock === 'boolean'
+        ? snapshot.guestLock
+        : guestRosterState.guestLock
+    };
+    renderGuestRoster();
+    if (!sessionState.isHost) {
+      renderGuestSelfPanel();
+    }
+  }
+
+  function openGuestPanel() {
+    if (!guestPanel) return;
+    updateGuestPanelView();
+    guestPanel.hidden = false;
+    guestPanel.dataset.open = 'true';
+    statusToggle?.setAttribute('aria-expanded', 'true');
+    uiState.guestPanelOpen = true;
+    if (sessionState.isHost && guestAllowAllInput && !guestAllowAllInput.disabled) {
+      guestAllowAllInput.focus();
+    } else if (guestPanel) {
+      const focusable = guestPanel.querySelector(
+        'input:not([disabled]), button:not([disabled])'
+      );
+      focusable?.focus();
+    }
+  }
+
+  function closeGuestPanel() {
+    if (!guestPanel) return;
+    if (guestPanel.hidden) return;
+    guestPanel.hidden = true;
+    delete guestPanel.dataset.open;
+    statusToggle?.setAttribute('aria-expanded', 'false');
+    uiState.guestPanelOpen = false;
+  }
+
+  function toggleGuestPanel(force) {
+    const shouldOpen =
+      typeof force === 'boolean'
+        ? force
+        : Boolean(guestPanel?.hidden);
+    if (shouldOpen) openGuestPanel();
+    else closeGuestPanel();
+  }
+
+  function handleGuestPanelOutsideClick(event) {
+    if (!uiState.guestPanelOpen) return;
+    if (!guestPanel) return;
+    if (guestPanel.contains(event.target)) return;
+    if (statusToggle && statusToggle.contains(event.target)) return;
+    closeGuestPanel();
+  }
+
+  function handleGuestAllowAllChange(event) {
+    if (suppressGuestControlsSync) return;
+    if (!sessionState.isHost) {
+      renderGuestRoster();
+      return;
+    }
+    const checked = !!event.target.checked;
+    networkApiRef.setGuestAccessMode(checked ? 'all' : 'host-only');
+  }
+
+  function handleGuestPermissionChange(event) {
+    if (!sessionState.isHost) return;
+    const input = event.target;
+    if (!input || !input.dataset.guestId) return;
+    networkApiRef.setGuestCanDraw(input.dataset.guestId, input.checked);
+  }
+
+  function handleGuestSelfNameInput(event) {
+    if (sessionState.isHost) return;
+    const value = event?.target?.value ?? '';
+    networkApiRef.sendGuestName(value);
+  }
+
+  function handleGuestRequestToggle() {
+    if (sessionState.isHost) return;
+    const connected = !!(sessionState.conn && sessionState.conn.open);
+    if (!connected) return;
+    const canDraw = !sessionState.remoteLock;
+    if (canDraw) return;
+    networkApiRef.setGuestRequestState(!sessionState.guestRequestPending);
+  }
+
   function refreshUi() {
-    updateLockToggle();
+    renderGuestRoster();
+    if (!sessionState.isHost) {
+      renderGuestSelfPanel();
+    }
     updateGuestControls();
     updateBackgroundInput();
     updateEraserLabel();
@@ -591,18 +877,18 @@ export function initUiModule({
       if (sessionState.conn && sessionState.conn.open) {
         const locked = sessionState.remoteLock;
         setStatus(
-          locked ? 'Sin edición' : 'conectado',
-          'connected'
+          locked ? 'Sin edición' : 'Conectado',
+          locked ? 'locked' : 'connected'
         );
       } else {
-        setStatus('sin conexión', 'disconnected');
+        setStatus('Sin conexión', 'disconnected');
       }
     } else {
       const count = guests.size;
       if (count > 0) {
-        setStatus(`conectados: ${count}`, 'connected');
+        setStatus(`Invitados conectados: ${count}`, 'connected');
       } else {
-        setStatus('esperando conexiones', 'connected');
+        setStatus('Esperando invitados', 'connected');
       }
     }
     updateRoleUi();
@@ -640,21 +926,6 @@ export function initUiModule({
       return;
     }
     applyBackground(value);
-  }
-
-  function handleLockToggle() {
-    if (!sessionState.isHost) {
-      if (lockToggle) {
-        lockToggle.checked = sessionState.remoteLock;
-      }
-      return;
-    }
-    sessionState.guestLock = !!lockToggle?.checked;
-    refreshUi();
-    networkApiRef.broadcast({
-      type: 'lock',
-      value: sessionState.guestLock
-    });
   }
 
   function handleViewToggle() {
@@ -729,6 +1000,7 @@ export function initUiModule({
     }
     if (event.key === 'Escape') {
       hideQr();
+      closeGuestPanel();
     }
   }
 
@@ -812,7 +1084,15 @@ export function initUiModule({
     });
 
     viewToggleBtn?.addEventListener('click', handleViewToggle);
-    lockToggle?.addEventListener('change', handleLockToggle);
+
+    statusToggle?.addEventListener('click', () => {
+      toggleGuestPanel();
+    });
+    guestPanelClose?.addEventListener('click', () => closeGuestPanel());
+    guestAllowAllInput?.addEventListener('change', handleGuestAllowAllChange);
+    document.addEventListener('click', handleGuestPanelOutsideClick);
+    guestSelfNameInput?.addEventListener('input', handleGuestSelfNameInput);
+    guestRequestBtn?.addEventListener('click', handleGuestRequestToggle);
 
     if (bgInput) {
       bgInput.addEventListener('input', handleBackgroundInput);
@@ -835,6 +1115,9 @@ export function initUiModule({
   }
 
   function initialize() {
+    statusToggle?.setAttribute('aria-expanded', 'false');
+    updateGuestPanelView();
+    closeGuestPanel();
     applyHostButtonState(sessionState.hostButtonState);
     applyJoinButtonState(sessionState.joinButtonState);
     setActiveSection(uiState.activeSection, { force: true });
@@ -842,6 +1125,10 @@ export function initUiModule({
     applyMenuState();
     updateViewToggle();
     updateShareLinkUi();
+    renderGuestRoster();
+    if (!sessionState.isHost) {
+      renderGuestSelfPanel();
+    }
     refreshUi();
     applyBackground(uiState.currentBackground, false);
   }
@@ -859,6 +1146,7 @@ export function initUiModule({
     updateViewToggle,
     onBackgroundApplied,
     applyBackground,
-    registerNetworkApi
+    registerNetworkApi,
+    updateGuestRoster
   };
 }

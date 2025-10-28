@@ -80,7 +80,8 @@ export function initNetworkModule({
     applyHostButtonState = noop,
     applyJoinButtonState = noop,
     updateShareLinkUi = noop,
-    hideQr = noop
+    hideQr = noop,
+    updateGuestRoster = noop
   } = uiApi;
 
   function requestStateRefresh({ immediate = false } = {}) {
@@ -121,7 +122,7 @@ export function initNetworkModule({
     }, 160);
   }
 
-  function sendStateTo(connection) {
+  function sendStateTo(connection, { lockOverride } = {}) {
     if (!connection) return;
     try {
       const pagesPayload = serializePages({ refreshActive: true });
@@ -141,7 +142,10 @@ export function initNetworkModule({
         h: height,
         w: width,
         bg: uiState.currentBackground,
-        lock: sessionState.guestLock,
+        lock:
+          typeof lockOverride === 'boolean'
+            ? lockOverride
+            : sessionState.guestLock,
         pages: pagesPayload,
         activePage: pagesState.activePageId,
         image: activePage?.image || canvasSnapshot()
@@ -151,12 +155,18 @@ export function initNetworkModule({
     }
   }
 
+  function getGuestEntry(id) {
+    return guests.get(id) || null;
+  }
+
   function broadcast(payload, excludeId = null) {
     if (!sessionState.isHost) return;
-    guests.forEach((guestConnection, id) => {
+    guests.forEach((guestInfo, id) => {
       if (excludeId && id === excludeId) return;
+      const connection = guestInfo?.connection;
+      if (!connection) return;
       try {
-        if (guestConnection.open) guestConnection.send(payload);
+        if (connection.open) connection.send(payload);
       } catch (err) {
         console.warn('Error al enviar datos a un invitado.', err);
       }
@@ -209,6 +219,172 @@ export function initNetworkModule({
         console.warn('No se pudo enviar el evento clear.', err);
       }
     }
+  }
+
+  function defaultGuestName(index) {
+    return `Invitado ${index}`;
+  }
+
+  function buildGuestDisplayName({ index, customName }) {
+    const base = defaultGuestName(index);
+    if (customName && customName.trim()) {
+      return `${base} (${customName.trim()})`;
+    }
+    return base;
+  }
+
+  function guestRosterSnapshot() {
+    const list = Array.from(guests.entries()).map(([id, info]) => ({
+      id,
+      index: info.index,
+      customName: info.customName || '',
+      defaultName: defaultGuestName(info.index),
+      displayName: buildGuestDisplayName(info),
+      canDraw: !!info.canDraw,
+      requesting: !!info.requesting
+    }));
+    list.sort((a, b) => a.index - b.index);
+    return {
+      total: list.length,
+      isHost: sessionState.isHost,
+      mode: sessionState.guestAccessMode,
+      guestLock: sessionState.guestLock,
+      guests: list
+    };
+  }
+
+  function pushGuestRosterUpdate() {
+    updateGuestRoster(guestRosterSnapshot());
+  }
+
+  function registerGuestConnection(connection) {
+    sessionState.guestCounter += 1;
+    const index = sessionState.guestCounter;
+    const info = {
+      connection,
+      index,
+      customName: '',
+      canDraw: sessionState.guestAccessMode === 'all',
+      requesting: false
+    };
+    guests.set(connection.peer, info);
+    return info;
+  }
+
+  function removeGuestConnection(id) {
+    if (!guests.has(id)) return;
+    guests.delete(id);
+  }
+
+  function sendLockForEntry(entry) {
+    if (!entry) return;
+    const connection = entry.connection;
+    if (!connection) return;
+    const locked = !entry.canDraw;
+    try {
+      connection.send({ type: 'lock', value: locked });
+    } catch (err) {
+      console.warn('No se pudo actualizar el permiso de dibujo de un invitado.', err);
+    }
+  }
+
+  function notifyGuestRequestState(entry) {
+    if (!entry) return;
+    const connection = entry.connection;
+    if (!connection) return;
+    try {
+      connection.send({
+        type: 'request-draw',
+        requesting: !!entry.requesting
+      });
+    } catch (err) {
+      console.warn('No se pudo actualizar la solicitud de edición de un invitado.', err);
+    }
+  }
+
+  function setGuestCanDraw(id, allowed) {
+    if (!sessionState.isHost) return;
+    const entry = getGuestEntry(id);
+    if (!entry) return;
+    const target = !!allowed;
+    if (entry.canDraw === target) return;
+    entry.canDraw = target;
+    if (sessionState.guestAccessMode === 'all' && !target) {
+      sessionState.guestAccessMode = 'custom';
+      sessionState.guestLock = true;
+    } else if (target && sessionState.guestAccessMode === 'host-only') {
+      sessionState.guestAccessMode = 'custom';
+      sessionState.guestLock = true;
+    }
+    entry.requesting = false;
+    sendLockForEntry(entry);
+    notifyGuestRequestState(entry);
+    pushGuestRosterUpdate();
+  }
+
+  function setGuestAccessMode(mode) {
+    if (!sessionState.isHost) return;
+    const valid = ['host-only', 'all', 'custom'];
+    if (!valid.includes(mode)) return;
+    if (sessionState.guestAccessMode === mode) return;
+    sessionState.guestAccessMode = mode;
+    switch (mode) {
+      case 'all':
+        sessionState.guestLock = false;
+        guests.forEach(entry => {
+          entry.canDraw = true;
+          entry.requesting = false;
+          notifyGuestRequestState(entry);
+        });
+        broadcast({ type: 'lock', value: false });
+        break;
+      case 'host-only':
+        sessionState.guestLock = true;
+        guests.forEach(entry => {
+          entry.canDraw = false;
+          entry.requesting = false;
+          notifyGuestRequestState(entry);
+        });
+        broadcast({ type: 'lock', value: true });
+        break;
+      case 'custom':
+      default:
+        sessionState.guestLock = true;
+        guests.forEach(entry => {
+          sendLockForEntry(entry);
+        });
+        break;
+    }
+    pushGuestRosterUpdate();
+  }
+
+  function sendGuestName(name) {
+    if (sessionState.isHost) return;
+    const trimmed = (name ?? '').toString().trim().slice(0, 48);
+    if (sessionState.guestName === trimmed) return;
+    sessionState.guestName = trimmed;
+    if (sessionState.conn && sessionState.conn.open) {
+      try {
+        sessionState.conn.send({ type: 'guest-name', name: trimmed });
+      } catch (err) {
+        console.warn('No se pudo enviar el nombre del invitado.', err);
+      }
+    }
+  }
+
+  function setGuestRequestState(requesting) {
+    if (sessionState.isHost) return;
+    const target = !!requesting;
+    if (sessionState.guestRequestPending === target) return;
+    sessionState.guestRequestPending = target;
+    if (sessionState.conn && sessionState.conn.open) {
+      try {
+        sessionState.conn.send({ type: 'request-draw', requesting: target });
+      } catch (err) {
+        console.warn('No se pudo enviar la solicitud de edición.', err);
+      }
+    }
+    refreshUi();
   }
 
   function emitStroke(segment) {
@@ -393,6 +569,32 @@ export function initNetworkModule({
           }
         }
         break;
+      case 'guest-name':
+        if (sessionState.isHost && source) {
+          const entry = getGuestEntry(source.peer);
+          if (entry) {
+            const trimmed = (msg.name ?? '').toString().trim().slice(0, 48);
+            entry.customName = trimmed;
+            pushGuestRosterUpdate();
+          }
+        } else if (!sessionState.isHost) {
+          sessionState.guestName = (msg.name ?? '').toString().trim().slice(0, 48);
+          refreshUi();
+        }
+        break;
+      case 'request-draw':
+        if (sessionState.isHost && source) {
+          const entry = getGuestEntry(source.peer);
+          if (entry) {
+            entry.requesting = !!msg.requesting;
+            notifyGuestRequestState(entry);
+            pushGuestRosterUpdate();
+          }
+        } else if (!sessionState.isHost) {
+          sessionState.guestRequestPending = !!msg.requesting;
+          refreshUi();
+        }
+        break;
       case 'lock':
         if (typeof msg.value === 'boolean') {
           if (sessionState.isHost) {
@@ -408,6 +610,9 @@ export function initNetworkModule({
             }
           } else {
             sessionState.remoteLock = msg.value;
+            if (!msg.value) {
+              sessionState.guestRequestPending = false;
+            }
             refreshUi();
           }
         }
@@ -472,7 +677,17 @@ export function initNetworkModule({
       case 'request-state':
       case 'hello':
         if (sessionState.isHost && source) {
-          sendStateTo(source);
+          const entry = getGuestEntry(source.peer);
+          const locked =
+            entry && sessionState.guestAccessMode !== 'all'
+              ? !entry.canDraw
+              : sessionState.guestLock;
+          sendStateTo(source, { lockOverride: locked });
+          try {
+            source.send({ type: 'lock', value: locked });
+          } catch (err) {
+            console.warn('No se pudo enviar el estado de bloqueo al invitado.', err);
+          }
         }
         break;
       case 'viewport-info':
@@ -506,7 +721,9 @@ export function initNetworkModule({
         console.warn('Error al destruir el peer del anfitrión.', err);
       }
     }
-    guests.forEach(connection => {
+    guests.forEach(guestInfo => {
+      const connection = guestInfo?.connection;
+      if (!connection) return;
       try {
         connection.close();
       } catch (err) {
@@ -514,6 +731,10 @@ export function initNetworkModule({
       }
     });
     guests.clear();
+    sessionState.guestCounter = 0;
+    sessionState.guestAccessMode = 'host-only';
+    sessionState.guestRequestPending = false;
+    pushGuestRosterUpdate();
     sessionState.conn = null;
     sessionState.peer = null;
     sessionState.shareUrl = '';
@@ -554,10 +775,11 @@ export function initNetworkModule({
   function updateStatusForGuests() {
     const count = guests.size;
     if (count > 0) {
-      setStatus(`conectados: ${count}`, 'connected');
+      setStatus(`Invitados conectados: ${count}`, 'connected');
     } else {
-      setStatus('esperando conexiones', 'connected');
+      setStatus('Esperando invitados', 'connected');
     }
+    pushGuestRosterUpdate();
   }
 
   function startHost({ force = false } = {}) {
@@ -584,14 +806,20 @@ export function initNetworkModule({
       setStatus('esperando conexiones', 'connected');
     });
     sessionState.peer.on('connection', connection => {
-      guests.set(connection.peer, connection);
+      const info = registerGuestConnection(connection);
       updateStatusForGuests();
       connection.on('close', () => {
-        guests.delete(connection.peer);
+        removeGuestConnection(connection.peer);
         updateStatusForGuests();
       });
       connection.on('data', msg => handleIncoming(msg, connection));
-      sendStateTo(connection);
+      const locked = !info.canDraw;
+      sendStateTo(connection, { lockOverride: locked });
+      try {
+        connection.send({ type: 'lock', value: locked });
+      } catch (err) {
+        console.warn('No se pudo enviar estado de bloqueo al invitado.', err);
+      }
       try {
         connection.send({ type: 'hello' });
       } catch (err) {
@@ -638,6 +866,26 @@ export function initNetworkModule({
           sessionState.conn.send({ type: 'request-state' });
         } catch (err) {
           console.warn('No se pudo solicitar el estado inicial.', err);
+        }
+        if (sessionState.guestName) {
+          try {
+            sessionState.conn.send({
+              type: 'guest-name',
+              name: sessionState.guestName
+            });
+          } catch (err) {
+            console.warn('No se pudo enviar el nombre del invitado al conectar.', err);
+          }
+        }
+        if (sessionState.guestRequestPending) {
+          try {
+            sessionState.conn.send({
+              type: 'request-draw',
+              requesting: true
+            });
+          } catch (err) {
+            console.warn('No se pudo reenviar la solicitud de edición al conectar.', err);
+          }
         }
       });
       sessionState.conn.on('data', msg =>
@@ -686,12 +934,17 @@ export function initNetworkModule({
     }
   }
 
+  pushGuestRosterUpdate();
   setupAutoStartFromUrl();
 
   return {
     startHost,
     startGuest,
     cleanupPeer,
+    setGuestCanDraw,
+    setGuestAccessMode,
+    sendGuestName,
+    setGuestRequestState,
     broadcast,
     emitStroke,
     emitShape,
