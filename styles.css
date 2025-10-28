@@ -118,6 +118,7 @@
     #status[data-state="error"]{ color:#fecaca; }
     #status[data-state="error"]::before{ background:#f87171; box-shadow:0 0 0 2px rgba(248,113,113,.35); }
     header[data-collapsed="true"] .toolbar-controls { display:none; }
+    header[data-collapsed="true"] .header-pages { display:none; }
     header[data-collapsed="true"] #status { justify-self:end; }
     #menuToggle { display:inline-flex; justify-content:center; align-items:center; gap:.35rem; }
     header[data-role="host"] { box-shadow: 0 0 0 2px rgba(22,163,74,0.35); }
@@ -338,6 +339,7 @@
     #status[data-state="locked"]::before{ background:#fb923c; box-shadow:0 0 0 2px rgba(251,146,60,.22); }
     #status[data-state="error"]{ color:#b91c1c; }
     #status[data-state="error"]::before{ background:#f87171; box-shadow:0 0 0 2px rgba(248,113,113,.22); }
+    header[data-collapsed="true"] .header-pages{ display:none; }
     .board{ background:var(--panel-muted); }
     #canvas{ background:#fff; }
     .view-toggle{ background:var(--panel); border-color:var(--border); color:var(--muted); box-shadow:var(--shadow-soft); }
