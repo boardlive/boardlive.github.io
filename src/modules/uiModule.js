@@ -99,7 +99,8 @@ export function initUiModule({
     forceCloseToolSettings = noop,
     updateToolSettingsUi = noop,
     setEraserMode = noop,
-    updateEraserLabel = noop
+    updateEraserLabel = noop,
+    ensureToolSettingsWithinViewport = noop
   } = toolsApi;
 
   const {
@@ -145,6 +146,7 @@ export function initUiModule({
       bgInput.value || uiState.currentBackground || '#ffffff';
   }
   uiState.boardExpanded ??= false;
+  uiState.restoreToolSettingsOnExpand ??= false;
   canvasState.historyActionStarted ??= false;
   toolsState.currentTool ??= 'pen';
   canvasState.shapeStart ??= null;
@@ -878,7 +880,7 @@ export function initUiModule({
       if (sessionState.conn && sessionState.conn.open) {
         const locked = sessionState.remoteLock;
         setStatus(
-          locked ? 'Sin edición' : 'Conectado',
+          locked ? 'Pulsa para pedir permiso' : 'Conectado',
           locked ? 'locked' : 'connected'
         );
       } else {
@@ -933,7 +935,28 @@ export function initUiModule({
     if (uiState.boardExpanded) {
       exitBoardFullscreen();
     } else {
+      uiState.restoreToolSettingsOnExpand = !!toolsState.toolSettingsOpen;
       enterBoardFullscreen();
+    }
+  }
+
+  function handleBoardFullscreenChange({ active } = {}) {
+    if (active) {
+      if (
+        uiState.restoreToolSettingsOnExpand &&
+        !toolsState.toolSettingsOpen
+      ) {
+        setToolSettingsOpen(true, { force: true });
+      }
+      if (toolsState.toolSettingsOpen) {
+        ensureToolSettingsWithinViewport();
+      }
+      uiState.restoreToolSettingsOnExpand = false;
+    } else {
+      uiState.restoreToolSettingsOnExpand = false;
+      if (toolsState.toolSettingsOpen) {
+        ensureToolSettingsWithinViewport();
+      }
     }
   }
 
@@ -1147,6 +1170,7 @@ export function initUiModule({
     updateShareLinkUi,
     hideQr,
     updateViewToggle,
+    handleBoardFullscreenChange,
     onBackgroundApplied,
     applyBackground,
     registerNetworkApi,

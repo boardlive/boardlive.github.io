@@ -33,7 +33,8 @@ const {
   forceCloseToolSettings,
   updateToolSettingsUi,
   setEraserMode,
-  updateEraserLabel
+  updateEraserLabel,
+  ensureToolSettingsWithinViewport
 } = toolsModule;
 
 const canvasNetworkApi = {
@@ -75,7 +76,9 @@ const pagesModule = initPagesModule({
     broadcast: (...args) => networkModule?.broadcast(...args)
   },
   uiApi: {
-    onViewToggle: () => uiModule?.updateViewToggle()
+    onViewToggle: () => uiModule?.updateViewToggle(),
+    onBoardFullscreenChange: payload =>
+      uiModule?.handleBoardFullscreenChange?.(payload)
   }
 });
 
@@ -102,7 +105,8 @@ uiModule = initUiModule({
     forceCloseToolSettings,
     updateToolSettingsUi,
     setEraserMode,
-    updateEraserLabel
+    updateEraserLabel,
+    ensureToolSettingsWithinViewport
   },
   canvasApi: {
     expandCanvasToViewport,

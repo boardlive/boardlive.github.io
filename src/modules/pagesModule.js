@@ -69,12 +69,18 @@ export function initPagesModule({
   } = canvasApi;
 
   const { broadcast = noop } = networkApi;
-  const { onPagePanelToggle = noop } = uiApi;
+  const {
+    onPagePanelToggle = noop,
+    onViewToggle = noop,
+    onBoardFullscreenChange = noop
+  } = uiApi;
 
   const pagePanelEl = pagePanel;
   const pageThumbnailsEl = pageThumbnails;
   const pagePanelPosition = pagesState.pagePanelPosition;
   const pagePanelDrag = pagesState.pagePanelDrag;
+  let fullscreenTarget =
+    board?.closest('.wrap') ?? board ?? document.documentElement;
 
   pagesState.activePageId ??= null;
   pagesState.pageOrderCounter ??= 0;
@@ -269,11 +275,13 @@ export function initPagesModule({
 
   function isBoardFullscreen() {
     const el = fullscreenElement();
-    return !!el && el === board;
+    return !!el && el === fullscreenTarget;
   }
 
   async function enterBoardFullscreen() {
-    const target = board || document.documentElement;
+    const target =
+      board?.closest('.wrap') ?? board ?? document.documentElement;
+    fullscreenTarget = target;
     if (!target) return;
     try {
       if (target.requestFullscreen) {
@@ -337,10 +345,13 @@ export function initPagesModule({
     uiState.boardExpanded = active;
     if (active) {
       document.body.dataset.boardExpanded = 'true';
-      setPagePanelOpen(false);
     } else {
       delete document.body.dataset.boardExpanded;
     }
+    onBoardFullscreenChange({
+      active,
+      pagePanelOpen: pagesState.pagePanelOpen
+    });
     updateViewToggle();
     expandCanvasToViewport(true);
     ensurePagePanelWithinViewport();
@@ -348,7 +359,7 @@ export function initPagesModule({
 
   function updateViewToggle() {
     // This helper remains for compatibility; UI module may override later.
-    uiApi.onViewToggle?.(uiState.boardExpanded);
+    onViewToggle(uiState.boardExpanded);
   }
 
   function generatePageId() {
