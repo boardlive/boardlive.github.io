@@ -64,6 +64,7 @@ export function initUiModule({
     menuToggle: menuToggleBtn,
     undo: undoBtn,
     redo: redoBtn,
+    boardRestore: boardRestoreBtn,
     insertImage: insertImageBtn,
     openImage: openImageBtn,
     statusToggle,
@@ -970,6 +971,10 @@ export function initUiModule({
         ensureToolSettingsWithinViewport();
       }
     }
+    if (boardRestoreBtn) {
+      if (active) boardRestoreBtn.removeAttribute('hidden');
+      else boardRestoreBtn.setAttribute('hidden', '');
+    }
   }
 
   function sanitizeCodeInput() {
@@ -1120,6 +1125,7 @@ export function initUiModule({
     });
 
     viewToggleBtn?.addEventListener('click', handleViewToggle);
+    boardRestoreBtn?.addEventListener('click', handleViewToggle);
 
     statusToggle?.addEventListener('click', () => {
       toggleGuestPanel();

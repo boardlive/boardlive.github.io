@@ -57,6 +57,7 @@ export function collectDomRefs() {
       menuToggle: byId('menuToggle'),
       undo: byId('undo'),
       redo: byId('redo'),
+      boardRestore: byId('boardRestoreBtn'),
       insertImage: byId('insertImage'),
       pageAdd: byId('pageAdd'),
       pagePrev: byId('pagePrev'),
