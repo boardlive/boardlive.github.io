@@ -169,7 +169,16 @@
     }
     .hidden { display:none !important; }
     .board { position:relative; height: 100%; overflow:auto; background:#0b1220; }
-    .board.guest-view { box-shadow: inset 0 0 0 1px rgba(59,130,246,.55); }
+    .board.guest-view { box-shadow: inset 0 0 0 2px rgba(59,130,246,.45); }
+    .board.guest-view::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      border-radius:16px;
+      border:2px solid rgba(59,130,246,.65);
+      box-shadow:0 0 0 4px rgba(59,130,246,.18), 0 32px 68px rgba(15,23,42,.28);
+    }
     .board-restore-btn{
       position:absolute;
       top:1rem;

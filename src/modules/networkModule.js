@@ -54,7 +54,9 @@ export function initNetworkModule({
     setCanvasCssHeight = noop,
     applyCanvasWidth = noop,
     adjustGuestView = noop,
-    applyBackgroundColor = noop
+    applyBackgroundColor = noop,
+    performUndo = noop,
+    performRedo = noop
   } = canvasApi;
 
   const {
@@ -203,6 +205,42 @@ export function initNetworkModule({
                 0
             )
     });
+  }
+
+  function requestUndo() {
+    if (sessionState.isHost) {
+      performUndo();
+      return;
+    }
+    if (
+      !sessionState.conn ||
+      !sessionState.conn.open ||
+      sessionState.remoteLock
+    )
+      return;
+    try {
+      sessionState.conn.send({ type: 'undo' });
+    } catch (err) {
+      console.warn('No se pudo solicitar deshacer al anfitrión.', err);
+    }
+  }
+
+  function requestRedo() {
+    if (sessionState.isHost) {
+      performRedo();
+      return;
+    }
+    if (
+      !sessionState.conn ||
+      !sessionState.conn.open ||
+      sessionState.remoteLock
+    )
+      return;
+    try {
+      sessionState.conn.send({ type: 'redo' });
+    } catch (err) {
+      console.warn('No se pudo solicitar rehacer al anfitrión.', err);
+    }
   }
 
   function emitClear() {
@@ -497,6 +535,34 @@ export function initNetworkModule({
         }
         if (sessionState.isHost) {
           broadcast(msg, source?.peer);
+        }
+        break;
+      case 'undo':
+        if (sessionState.isHost) {
+          let allowed = true;
+          if (source) {
+            if (sessionState.guestAccessMode === 'all') {
+              allowed = !sessionState.guestLock;
+            } else {
+              const entry = getGuestEntry(source.peer);
+              allowed = !!entry?.canDraw;
+            }
+          }
+          if (allowed) performUndo();
+        }
+        break;
+      case 'redo':
+        if (sessionState.isHost) {
+          let allowed = true;
+          if (source) {
+            if (sessionState.guestAccessMode === 'all') {
+              allowed = !sessionState.guestLock;
+            } else {
+              const entry = getGuestEntry(source.peer);
+              allowed = !!entry?.canDraw;
+            }
+          }
+          if (allowed) performRedo();
         }
         break;
       case 'shape': {
@@ -952,6 +1018,8 @@ export function initNetworkModule({
     emitClear,
     broadcastCanvasSnapshot,
     broadcastViewport,
-    requestStateRefresh
+    requestStateRefresh,
+    requestUndo,
+    requestRedo
   };
 }

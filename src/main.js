@@ -47,7 +47,9 @@ const canvasNetworkApi = {
   emitViewport: (...args) =>
     networkModule?.broadcastViewport(...args),
   requestStateRefresh: (...args) =>
-    networkModule?.requestStateRefresh(...args)
+    networkModule?.requestStateRefresh(...args),
+  requestUndo: (...args) => networkModule?.requestUndo(...args),
+  requestRedo: (...args) => networkModule?.requestRedo(...args)
 };
 
 const canvasModule = initCanvasModule({

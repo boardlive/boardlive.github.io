@@ -76,7 +76,9 @@ export function initCanvasModule({
     emitImage = noop,
     emitCanvasSnapshot = noop,
     emitViewport = noop,
-    requestStateRefresh = noop
+    requestStateRefresh = noop,
+    requestUndo = noop,
+    requestRedo = noop
   } = networkApi;
 
   let pagesScheduleSnapshot =
@@ -1300,7 +1302,10 @@ export function initCanvasModule({
   }
 
   function performUndo() {
-    if (!sessionState.isHost) return;
+    if (!sessionState.isHost) {
+      requestUndo();
+      return;
+    }
     finalizeActiveImageIfPresent();
     if (undoStack.length <= 1) return;
     const current = undoStack.pop();
@@ -1322,7 +1327,10 @@ export function initCanvasModule({
   }
 
   function performRedo() {
-    if (!sessionState.isHost) return;
+    if (!sessionState.isHost) {
+      requestRedo();
+      return;
+    }
     finalizeActiveImageIfPresent();
     if (redoStack.length === 0) return;
     const snapshot = redoStack.pop();
