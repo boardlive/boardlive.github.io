@@ -19,7 +19,7 @@
       <div class="toolbar-nav" role="tablist" aria-label="Secciones de la herramienta">
         <button class="btn tab-btn" type="button" data-target="session" role="tab" aria-controls="section-session">Sesión</button>
         <button class="btn tab-btn" type="button" data-target="draw" role="tab" aria-controls="section-draw">Dibujo</button>
-        <button class="btn tab-btn" type="button" data-target="options" role="tab" aria-controls="section-options">Opciones</button>
+        <button class="btn tab-btn" type="button" data-target="options" role="tab" aria-controls="section-options">Archivo</button>
       </div>
       <div id="toolbarControls" class="toolbar-controls" data-active="session">
         <div id="section-session" class="toolbar-section" data-section="session" role="tabpanel" aria-label="Controles de sesión">
@@ -44,8 +44,18 @@
           </div>
         </div>
         <div id="section-options" class="toolbar-section" data-section="options" role="tabpanel" aria-label="Otras opciones">
-          <button id="openPdf" class="btn host-only" type="button" title="Abrir un PDF y añadir sus páginas">Abrir PDF</button>
-          <button id="savePdf" class="btn host-only" title="Guardar como PDF">Guardar PDF</button>
+          <button id="openImage" class="btn host-only btn-with-icon" type="button" title="Abrir una imagen y añadirla a la pizarra">
+            <span class="btn-icon" aria-hidden="true">🖼️</span>
+            <span>Abrir imagen</span>
+          </button>
+          <button id="openPdf" class="btn host-only btn-with-icon" type="button" title="Abrir un PDF y añadir sus páginas">
+            <span class="btn-icon" aria-hidden="true">📄</span>
+            <span>Abrir PDF</span>
+          </button>
+          <button id="savePdf" class="btn host-only btn-with-icon" title="Guardar como PDF">
+            <span class="btn-icon" aria-hidden="true">💾</span>
+            <span>Guardar PDF</span>
+          </button>
         </div>
         <input id="pdfInput" class="host-only" type="file" accept="application/pdf" style="display:none" />
         <input id="imageInput" class="host-only" type="file" accept="image/*" style="display:none" />

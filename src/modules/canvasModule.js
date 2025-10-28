@@ -52,7 +52,8 @@ export function initCanvasModule({
     undo: undoBtn,
     redo: redoBtn,
     clear: clearBtn,
-    insertImage: insertImageBtn
+    insertImage: insertImageBtn,
+    openImage: openImageBtn
   } = buttons;
 
   const { imageFile: imageInput } = inputs;
@@ -1431,13 +1432,17 @@ export function initCanvasModule({
       }
     });
 
-    insertImageBtn?.addEventListener('click', () => {
-      if (!sessionState.isHost) {
-        alert('Solo el anfitrión puede insertar imágenes.');
-        return;
-      }
-      imageInput?.click();
-    });
+    [insertImageBtn, openImageBtn]
+      .filter(Boolean)
+      .forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (!sessionState.isHost) {
+            alert('Solo el anfitrión puede insertar imágenes.');
+            return;
+          }
+          imageInput?.click();
+        });
+      });
 
     imageInput?.addEventListener('change', event => {
       const input = event.target;

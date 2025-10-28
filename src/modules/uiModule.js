@@ -65,6 +65,7 @@ export function initUiModule({
     undo: undoBtn,
     redo: redoBtn,
     insertImage: insertImageBtn,
+    openImage: openImageBtn,
     statusToggle,
     guestPanelClose,
     guestRequest: guestRequestBtn
@@ -1110,7 +1111,9 @@ export function initUiModule({
     redoBtn?.addEventListener('click', handleRedoButton);
     document.addEventListener('keydown', handleKeyboardShortcuts);
 
-    insertImageBtn?.addEventListener('click', handleInsertImage);
+    [insertImageBtn, openImageBtn]
+      .filter(Boolean)
+      .forEach(btn => btn.addEventListener('click', handleInsertImage));
     imageInput?.addEventListener('change', handleImageInput);
   }
 

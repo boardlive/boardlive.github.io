@@ -45,6 +45,7 @@ export function collectDomRefs() {
     buttons: {
       eraser: byId('eraser'),
       clear: byId('clear'),
+      openImage: byId('openImage'),
       openPdf: byId('openPdf'),
       savePdf: byId('savePdf'),
       host: byId('hostBtn'),
