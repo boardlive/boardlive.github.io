@@ -39,6 +39,156 @@ export function initCanvasModule({
   const imagesState = appState.images;
   const pagesState = appState.pages;
 
+  canvasState.pendingAction ??= null;
+  canvasState.actionLookup ??= new Map();
+  canvasState.actionsByPage ??= Object.create(null);
+  canvasState.authorStacks ??= Object.create(null);
+  canvasState.actionCounter ??= 0;
+  canvasState.pageBaselines ??= Object.create(null);
+
+  function ensureClientId() {
+    if (sessionState.clientId) return sessionState.clientId;
+    let generated = null;
+    try {
+      if (window?.crypto?.randomUUID) {
+        generated = window.crypto.randomUUID();
+      }
+    } catch (err) {
+      // ignore
+    }
+    if (!generated) {
+      generated = `local-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    sessionState.clientId = generated;
+    return sessionState.clientId;
+  }
+
+  const localAuthorId = ensureClientId();
+
+  function currentPageId() {
+    return pagesState.activePageId || 'default';
+  }
+
+  function ensureAuthorStack(authorId = localAuthorId, pageId = currentPageId()) {
+    if (!canvasState.authorStacks[authorId]) {
+      canvasState.authorStacks[authorId] = Object.create(null);
+    }
+    const byPage = canvasState.authorStacks[authorId];
+    if (!byPage[pageId]) {
+      byPage[pageId] = { undo: [], redo: [] };
+    }
+    return byPage[pageId];
+  }
+
+  function authorUndoStack(authorId = localAuthorId, pageId = currentPageId()) {
+    return ensureAuthorStack(authorId, pageId).undo;
+  }
+
+  function authorRedoStack(authorId = localAuthorId, pageId = currentPageId()) {
+    return ensureAuthorStack(authorId, pageId).redo;
+  }
+
+  function ensurePageActions(pageId = currentPageId()) {
+    if (!canvasState.actionsByPage[pageId]) {
+      canvasState.actionsByPage[pageId] = [];
+    }
+    return canvasState.actionsByPage[pageId];
+  }
+
+  function createActionId() {
+    canvasState.actionCounter =
+      typeof canvasState.actionCounter === 'number'
+        ? canvasState.actionCounter + 1
+        : 1;
+    const base = sessionState.clientId || localAuthorId;
+    return `${base}-${Date.now()}-${canvasState.actionCounter}`;
+  }
+
+  function recordAction(action) {
+    if (!action || !action.id) return;
+    action.active = action.active !== false;
+    const pageId = action.pageId || currentPageId();
+    action.pageId = pageId;
+    canvasState.actionLookup.set(action.id, action);
+    const pageActions = ensurePageActions(pageId);
+    if (!pageActions.includes(action.id)) {
+      pageActions.push(action.id);
+    }
+    const undoStack = authorUndoStack(action.authorId, pageId);
+    if (!undoStack.includes(action.id)) {
+      undoStack.push(action.id);
+      if (undoStack.length > HISTORY_LIMIT) {
+        undoStack.shift();
+      }
+    }
+    const redoStack = authorRedoStack(action.authorId, pageId);
+    redoStack.length = 0;
+  }
+
+  function ingestAction(action, { apply = true } = {}) {
+    if (!action || !action.id) return Promise.resolve();
+    recordAction(action);
+    const shouldApply = apply && action.active !== false;
+    const result = shouldApply
+      ? applyActionToCanvas(action)
+      : Promise.resolve();
+    return Promise.resolve(result).then(() => {
+      updateHistoryUi();
+    });
+  }
+
+  function setActionActive(
+    actionId,
+    active,
+    { pageId = currentPageId() } = {}
+  ) {
+    if (!actionId) return Promise.resolve(false);
+    const action = canvasState.actionLookup.get(actionId);
+    if (!action) return Promise.resolve(false);
+    const targetPageId = action.pageId || pageId;
+    action.active = !!active;
+    const undoStack = authorUndoStack(action.authorId, targetPageId);
+    const redoStack = authorRedoStack(action.authorId, targetPageId);
+    if (action.active) {
+      removeFromStack(redoStack, actionId);
+      if (!undoStack.includes(actionId)) {
+        undoStack.push(actionId);
+        if (undoStack.length > HISTORY_LIMIT) {
+          undoStack.shift();
+        }
+      }
+    } else {
+      removeFromStack(undoStack, actionId);
+      if (!redoStack.includes(actionId)) {
+        redoStack.push(actionId);
+        if (redoStack.length > HISTORY_LIMIT) {
+          redoStack.shift();
+        }
+      }
+    }
+    return rebuildCanvasFromHistory({ pageId: targetPageId, broadcast: false }).then(
+      () => true
+    );
+  }
+
+  function removeFromStack(stack, id) {
+    if (!Array.isArray(stack)) return;
+    const index = stack.lastIndexOf(id);
+    if (index >= 0) stack.splice(index, 1);
+  }
+
+  function localUndoStack() {
+    return authorUndoStack(localAuthorId, currentPageId());
+  }
+
+  function localRedoStack() {
+    return authorRedoStack(localAuthorId, currentPageId());
+  }
+
+  function getPageActionIds(pageId = currentPageId()) {
+    return ensurePageActions(pageId).slice();
+  }
+
   const {
     canvas,
     board,
@@ -78,7 +228,8 @@ export function initCanvasModule({
     emitViewport = noop,
     requestStateRefresh = noop,
     requestUndo = noop,
-    requestRedo = noop
+    requestRedo = noop,
+    notifyActionState = noop
   } = networkApi;
 
   let pagesScheduleSnapshot =
@@ -142,9 +293,6 @@ export function initCanvasModule({
   canvasState.viewportAdjustTimeout ??= null;
   sessionState.stateRequestTimeout ??= null;
   sessionState.lastGuestViewportSignature ??= null;
-
-  const undoStack = canvasState.undoStack;
-  const redoStack = canvasState.redoStack;
 
   let resizeObserver = null;
 
@@ -210,8 +358,10 @@ export function initCanvasModule({
   }
 
   function updateHistoryUi() {
+    const undoStack = localUndoStack();
+    const redoStack = localRedoStack();
     if (undoBtn) {
-      undoBtn.disabled = undoStack.length <= 1;
+      undoBtn.disabled = undoStack.length === 0;
     }
     if (redoBtn) {
       redoBtn.disabled = redoStack.length === 0;
@@ -275,36 +425,191 @@ export function initCanvasModule({
     }
   }
 
-  function beginHistoryAction() {
+  function beginHistoryAction({ type = 'stroke', data = {} } = {}) {
     if (canvasState.historyActionStarted) return;
-    const snapshot = canvasSnapshot();
-    if (
-      undoStack.length === 0 ||
-      undoStack[undoStack.length - 1] !== snapshot
-    ) {
-      undoStack.push(snapshot);
-      if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
-    }
+    const baseData =
+      type === 'stroke'
+        ? { segments: [] }
+        : type === 'shape'
+        ? {}
+        : type === 'image'
+        ? {}
+        : {};
+    const action = {
+      id: createActionId(),
+      authorId: localAuthorId,
+      pageId: currentPageId(),
+      type,
+      active: true,
+      timestamp: Date.now(),
+      ...baseData,
+      ...data
+    };
+    canvasState.pendingAction = action;
     canvasState.historyActionStarted = true;
   }
 
-  function commitHistoryAction() {
+  function commitHistoryAction({ finalize } = {}) {
     if (!canvasState.historyActionStarted) return;
-    const snapshot = canvasSnapshot();
-    if (undoStack[undoStack.length - 1] !== snapshot) {
-      undoStack.push(snapshot);
-      if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    const action = canvasState.pendingAction;
+    canvasState.pendingAction = null;
+    canvasState.historyActionStarted = false;
+    if (!action) {
+      updateHistoryUi();
+      return;
     }
-    redoStack.length = 0;
+    if (typeof finalize === 'function') {
+      finalize(action);
+    }
+    if (
+      (action.type === 'stroke' &&
+        (!Array.isArray(action.segments) || action.segments.length === 0)) ||
+      (action.type === 'shape' &&
+        (!action.start || !action.end || !action.shape))
+    ) {
+      updateHistoryUi();
+      return;
+    }
+    recordAction(action);
+    updateHistoryUi();
+  }
+
+  function resetHistory({ baseImage, pageId = currentPageId() } = {}) {
+    const actionIds = ensurePageActions(pageId);
+    actionIds.forEach(id => {
+      const action = canvasState.actionLookup.get(id);
+      if (!action) return;
+      const stacks = canvasState.authorStacks[action.authorId];
+      if (stacks && stacks[pageId]) {
+        removeFromStack(stacks[pageId].undo, id);
+        removeFromStack(stacks[pageId].redo, id);
+      }
+      canvasState.actionLookup.delete(id);
+    });
+    actionIds.length = 0;
+    Object.keys(canvasState.authorStacks).forEach(authorId => {
+      const entry = canvasState.authorStacks[authorId];
+      if (entry && entry[pageId]) {
+        entry[pageId].undo = [];
+        entry[pageId].redo = [];
+      }
+    });
+    const snapshot =
+      typeof baseImage === 'string' && baseImage
+        ? baseImage
+        : canvasSnapshot();
+    canvasState.pageBaselines[pageId] = snapshot;
     canvasState.historyActionStarted = false;
     updateHistoryUi();
   }
 
-  function resetHistory() {
-    undoStack.length = 0;
-    redoStack.length = 0;
-    canvasState.historyActionStarted = false;
-    undoStack.push(canvasSnapshot());
+  function getBaselineImage(pageId = currentPageId()) {
+    return canvasState.pageBaselines[pageId] || null;
+  }
+
+  function setBaselineImage(dataUrl, pageId = currentPageId()) {
+    if (typeof dataUrl === 'string' && dataUrl) {
+      canvasState.pageBaselines[pageId] = dataUrl;
+    } else {
+      canvasState.pageBaselines[pageId] = null;
+    }
+  }
+
+  function drawSnapshotFast(dataUrl) {
+    if (!dataUrl) {
+      clearCanvasPixels();
+      return Promise.resolve();
+    }
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        syncCanvasResolution({ preserve: false });
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = dataUrl;
+    });
+  }
+
+  async function applyBaseline(pageId = currentPageId()) {
+    const base = getBaselineImage(pageId);
+    if (base) {
+      await drawSnapshotFast(base);
+    } else {
+      clearCanvas({ skipSnapshot: true });
+    }
+  }
+
+  async function applyActionToCanvas(action) {
+    if (!action || action.active === false) return;
+    switch (action.type) {
+      case 'stroke':
+        if (Array.isArray(action.segments)) {
+          action.segments.forEach(seg => drawSegment(seg));
+        }
+        break;
+      case 'shape':
+        if (action.shape && action.start && action.end) {
+          drawShapeOnCanvas({
+            shape: action.shape,
+            start: action.start,
+            end: action.end,
+            color: action.color,
+            size: action.size,
+            fill: action.fill
+          });
+        }
+        break;
+      case 'image':
+        if (action.dataUrl) {
+          await drawImageFromDataUrl({
+            dataUrl: action.dataUrl,
+            x: Number.isFinite(action.x) ? action.x : 0,
+            y: Number.isFinite(action.y) ? action.y : 0,
+            width: Number.isFinite(action.width) ? action.width : undefined,
+            height: Number.isFinite(action.height) ? action.height : undefined
+          });
+        }
+        break;
+      case 'clear':
+        clearCanvasPixels();
+        break;
+      default:
+        break;
+    }
+  }
+
+  async function rebuildCanvasFromHistory({
+    pageId = currentPageId(),
+    broadcast = false
+  } = {}) {
+    await applyBaseline(pageId);
+    const ids = getPageActionIds(pageId);
+    for (const id of ids) {
+      const action = canvasState.actionLookup.get(id);
+      if (!action || action.active === false) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await applyActionToCanvas(action);
+    }
+    if (sessionState.isHost) {
+      pagesScheduleSnapshot();
+      if (broadcast) {
+        emitCanvasSnapshot({
+          image: canvasSnapshot(),
+          bg: uiState.currentBackground
+        });
+      }
+    } else if (broadcast) {
+      emitCanvasSnapshot({
+        image: canvasSnapshot(),
+        bg: uiState.currentBackground
+      });
+    }
     updateHistoryUi();
   }
 
@@ -393,14 +698,19 @@ export function initCanvasModule({
     ctx.restore();
   }
 
-  function clearCanvas() {
-    cancelActiveImage();
+  function clearCanvasPixels() {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
+  }
+
+  function clearCanvas(options = {}) {
+    const { skipSnapshot = false } = options || {};
+    cancelActiveImage();
+    clearCanvasPixels();
     if (sessionState.isHost) {
-      pagesScheduleSnapshot();
+      if (!skipSnapshot) pagesScheduleSnapshot();
     }
   }
 
@@ -651,11 +961,21 @@ export function initCanvasModule({
       return true;
     }
     try {
-      beginHistoryAction();
+      beginHistoryAction({
+        type: 'image',
+        data: {
+          dataUrl: state.dataUrl,
+          x: state.x,
+          y: state.y,
+          width: state.width,
+          height: state.height
+        }
+      });
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(state.imgEl, state.x, state.y, state.width, state.height);
       ctx.restore();
+      const actionId = canvasState.pendingAction?.id;
       commitHistoryAction();
       pagesScheduleSnapshot();
       emitImage({
@@ -663,7 +983,9 @@ export function initCanvasModule({
         x: state.x,
         y: state.y,
         width: state.width,
-        height: state.height
+        height: state.height,
+        actionId,
+        authorId: localAuthorId
       });
     } catch (err) {
       canvasState.historyActionStarted = false;
@@ -891,11 +1213,20 @@ export function initCanvasModule({
         }
       }
     }
+    const tool = getEffectiveTool();
+    const shapeTool = isShapeTool(tool);
+    beginHistoryAction({
+      type: shapeTool ? 'shape' : 'stroke',
+      data: {
+        tool,
+        shape: shapeTool ? tool : null,
+        erasing: canvasState.erasing,
+        segments: []
+      }
+    });
     const pos = pointerXY(e);
     if (!pos) return;
-    beginHistoryAction();
-    const tool = getEffectiveTool();
-    if (isShapeTool(tool)) {
+    if (shapeTool) {
       canvasState.shapeStart = pos;
       canvasState.shapeSnapshot = captureCanvasState();
       canvasState.drawingShape = true;
@@ -967,7 +1298,20 @@ export function initCanvasModule({
       alpha: tool === 'highlight' ? HIGHLIGHT_ALPHA : undefined
     };
     drawSegment(segment);
-    emitStroke(segment);
+    if (
+      canvasState.historyActionStarted &&
+      canvasState.pendingAction &&
+      canvasState.pendingAction.type === 'stroke'
+    ) {
+      canvasState.pendingAction.segments.push({ ...segment });
+    }
+    const actionId = canvasState.pendingAction?.id;
+    emitStroke({
+      ...segment,
+      actionId,
+      authorId: localAuthorId,
+      final: false
+    });
     canvasState.lastPoint = p;
     canvasState.lastMidpoint = mid;
     e.preventDefault();
@@ -1006,8 +1350,32 @@ export function initCanvasModule({
           // ignore
         }
       }
+      if (
+        canvasState.historyActionStarted &&
+        canvasState.pendingAction &&
+        canvasState.pendingAction.type === 'shape'
+      ) {
+        Object.assign(canvasState.pendingAction, {
+          shape: tool,
+          start,
+          end: pos,
+          color,
+          size,
+          fill
+        });
+      }
+      const actionId = canvasState.pendingAction?.id;
       commitHistoryAction();
-      emitShapeEvent({ shape: tool, start, end: pos, color, size, fill });
+      emitShapeEvent({
+        shape: tool,
+        start,
+        end: pos,
+        color,
+        size,
+        fill,
+        actionId,
+        authorId: localAuthorId
+      });
     } else if (canvasState.drawing) {
       const toolKey = tool === 'eraser' ? 'pen' : tool;
       const color = canvasState.erasing
@@ -1035,7 +1403,20 @@ export function initCanvasModule({
           alpha: tool === 'highlight' ? HIGHLIGHT_ALPHA : undefined
         };
         drawSegment(segment);
-        emitStroke(segment);
+        if (
+          canvasState.historyActionStarted &&
+          canvasState.pendingAction &&
+          canvasState.pendingAction.type === 'stroke'
+        ) {
+          canvasState.pendingAction.segments.push({ ...segment });
+        }
+        const actionIdFinal = canvasState.pendingAction?.id;
+        emitStroke({
+          ...segment,
+          actionId: actionIdFinal,
+          authorId: localAuthorId,
+          final: true
+        });
       }
       canvasState.drawing = false;
       canvasState.lastPoint = null;
@@ -1117,6 +1498,37 @@ export function initCanvasModule({
     setTouchPanMode(multi);
   }
 
+  function updateBoardGapIndicator({ availableHeight = 0, availableWidth = 0 } = {}) {
+    if (!board) return;
+    if (sessionState.isHost) {
+      board.classList.remove('board-has-gap');
+      return;
+    }
+    const scale =
+      Number.isFinite(canvasState.canvasScale) && canvasState.canvasScale > 0
+        ? canvasState.canvasScale
+        : 1;
+    const cssHeight =
+      typeof canvasState.cssHeight === 'number'
+        ? canvasState.cssHeight
+        : canvas?.offsetHeight || canvas?.clientHeight || 0;
+    const cssWidth =
+      typeof canvasState.cssWidth === 'number'
+        ? canvasState.cssWidth
+        : canvas?.offsetWidth || canvas?.clientWidth || 0;
+    if (availableHeight <= 0 || availableWidth <= 0 || !cssWidth || !cssHeight) {
+      board.classList.remove('board-has-gap');
+      return;
+    }
+    const scaledHeight = cssHeight * scale;
+    const scaledWidth = cssWidth * scale;
+    const heightGap = Math.max(0, availableHeight - scaledHeight);
+    const widthGap = Math.max(0, availableWidth - scaledWidth);
+    const threshold = 6;
+    const hasGap = heightGap > threshold || widthGap > threshold;
+    board.classList.toggle('board-has-gap', hasGap);
+  }
+
   function adjustGuestView() {
     if (typeof externalAdjustGuestView === 'function') {
       externalAdjustGuestView({
@@ -1143,10 +1555,12 @@ export function initCanvasModule({
         board.style.height = `${availableHeight}px`;
         board.style.overflow = 'hidden';
         document.body.style.overflow = 'hidden';
+        board.classList.remove('board-has-gap');
       } else {
         board.style.height = '';
         board.style.overflow = 'auto';
         document.body.style.overflow = '';
+        board.classList.remove('board-has-gap');
       }
       return;
     }
@@ -1178,6 +1592,7 @@ export function initCanvasModule({
     board.style.height = `${availableHeight}px`;
     board.style.overflow = 'auto';
     document.body.style.overflow = uiState.boardExpanded ? 'hidden' : '';
+    updateBoardGapIndicator({ availableHeight, availableWidth });
     if (canvasState.erasing) updateEraserCursorSize();
   }
 
@@ -1301,53 +1716,100 @@ export function initCanvasModule({
     }
   }
 
-  function performUndo() {
+  function performUndo(options = {}) {
+    const {
+      authorId = localAuthorId,
+      pageId = currentPageId(),
+      broadcast = sessionState.isHost,
+      notifyNetwork = !sessionState.isHost,
+      announce = sessionState.isHost,
+      sourcePeerId = null
+    } = options || {};
     if (!sessionState.isHost) {
-      requestUndo();
-      return;
+      if (notifyNetwork) requestUndo();
+      return null;
     }
     finalizeActiveImageIfPresent();
-    if (undoStack.length <= 1) return;
-    const current = undoStack.pop();
-    redoStack.push(current);
+    const stack = authorUndoStack(authorId, pageId);
+    if (!stack.length) {
+      updateHistoryUi();
+      return null;
+    }
+    const actionId = stack.pop();
+    const action = canvasState.actionLookup.get(actionId);
+    if (!action) {
+      updateHistoryUi();
+      return null;
+    }
+    action.active = false;
+    const redoStack = authorRedoStack(authorId, pageId);
+    redoStack.push(actionId);
     if (redoStack.length > HISTORY_LIMIT) redoStack.shift();
-    const snapshot = undoStack[undoStack.length - 1];
-    applySnapshot(snapshot)
-      .then(changed => {
-        if (changed) {
-          pagesScheduleSnapshot();
-          emitCanvasSnapshot({
-            image: snapshot,
-            bg: uiState.currentBackground
+    rebuildCanvasFromHistory({
+      pageId,
+      broadcast
+    })
+      .then(() => {
+        if (announce && typeof notifyActionState === 'function') {
+          notifyActionState({
+            id: actionId,
+            active: false,
+            authorId,
+            pageId,
+            sourcePeerId
           });
         }
-        updateHistoryUi();
       })
-      .catch(() => updateHistoryUi());
+      .catch(() => {});
+    return action;
   }
 
-  function performRedo() {
+  function performRedo(options = {}) {
+    const {
+      authorId = localAuthorId,
+      pageId = currentPageId(),
+      broadcast = sessionState.isHost,
+      notifyNetwork = !sessionState.isHost,
+      announce = sessionState.isHost,
+      sourcePeerId = null
+    } = options || {};
     if (!sessionState.isHost) {
-      requestRedo();
-      return;
+      if (notifyNetwork) requestRedo();
+      return null;
     }
     finalizeActiveImageIfPresent();
-    if (redoStack.length === 0) return;
-    const snapshot = redoStack.pop();
-    undoStack.push(snapshot);
+    const redoStack = authorRedoStack(authorId, pageId);
+    if (!redoStack.length) {
+      updateHistoryUi();
+      return null;
+    }
+    const actionId = redoStack.pop();
+    const action = canvasState.actionLookup.get(actionId);
+    if (!action) {
+      updateHistoryUi();
+      return null;
+    }
+    action.active = true;
+    const undoStack = authorUndoStack(authorId, pageId);
+    undoStack.push(actionId);
     if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
-    applySnapshot(snapshot)
-      .then(changed => {
-        if (changed) {
-          pagesScheduleSnapshot();
-          emitCanvasSnapshot({
-            image: snapshot,
-            bg: uiState.currentBackground
+    rebuildCanvasFromHistory({
+      pageId,
+      broadcast
+    })
+      .then(() => {
+        if (announce && typeof notifyActionState === 'function') {
+          notifyActionState({
+            id: actionId,
+            active: true,
+            authorId,
+            pageId,
+            sourcePeerId
           });
         }
-        updateHistoryUi();
       })
-      .catch(() => updateHistoryUi());
+      .catch(() => {});
+    return action;
   }
 
   function broadcastClear() {
@@ -1362,10 +1824,14 @@ export function initCanvasModule({
 
   function handleClear() {
     finalizeActiveImageIfPresent();
-    beginHistoryAction();
+    beginHistoryAction({ type: 'clear' });
     clearCanvas();
+    const actionId = canvasState.pendingAction?.id;
     commitHistoryAction();
-    broadcastClear();
+    broadcastClear({
+      actionId,
+      authorId: localAuthorId
+    });
   }
 
   function applyBackgroundColor(color, propagate = true) {
@@ -1545,6 +2011,10 @@ export function initCanvasModule({
     handleClear,
     applyBackgroundColor,
     registerPagesApi,
+    ingestAction,
+    setActionActive,
+    rebuildCanvasFromHistory,
+    setBaselineImage,
     emitStroke,
     emitShape: emitShapeEvent,
     emitImage,
