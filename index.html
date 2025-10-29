@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pizarra WebRTC + PeerJS</title>
+  <title>EcoBoard</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="stylesheet" href="styles.css" />
   <!-- PeerJS + QR + jsPDF -->
@@ -39,7 +39,6 @@
               <button id="undo" class="btn" type="button" title="Deshacer último trazo">↩️ Deshacer</button>
               <button id="redo" class="btn" type="button" title="Rehacer">↪️ Rehacer</button>
               <button id="insertImage" class="btn host-only" type="button" title="Insertar imagen">🖼️ Imagen</button>
-              <button id="viewToggle" class="btn view-toggle" type="button" aria-pressed="false" title="Maximizar área de dibujo">⛶ Maximizar</button>
             </div>
           </div>
         </div>
@@ -63,10 +62,13 @@
       <div class="header-pages">
         <button id="pageToggle" class="btn edit-only" type="button" aria-expanded="false" aria-controls="pagePanel" title="Mostrar páginas">🗂️ Páginas</button>
       </div>
-      <div id="status" class="status-indicator" data-state="disconnected">
-        <button id="statusToggle" class="btn status-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Ver conexiones">
-          <span id="statusText">sin conexión</span>
-        </button>
+      <div class="header-status">
+        <div id="status" class="status-indicator" data-state="disconnected">
+          <button id="statusToggle" class="btn status-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Ver conexiones">
+            <span id="statusText">sin conexión</span>
+          </button>
+        </div>
+        <button id="viewToggle" class="btn view-toggle" type="button" aria-pressed="false" title="Maximizar área de dibujo">⛶ Maximizar</button>
       </div>
     </header>
     <div id="toolSettingsPanel" class="tool-settings-popover edit-only" aria-live="polite" data-open="false" aria-hidden="true">

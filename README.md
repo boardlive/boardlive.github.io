@@ -1,4 +1,4 @@
-# Pizarra digital (versión modular)
+# EcoBoard (versión modular)
 
 Aplicación web para compartir una pizarra en tiempo real entre anfitrión e invitados utilizando PeerJS. El código se ha migrado a ES Modules y ahora sigue una arquitectura modular en la que `src/main.js` solo orquesta la inicialización de cada componente.
 

@@ -215,9 +215,13 @@ export function initUiModule({
   let suppressGuestControlsSync = false;
 
   function setStatus(text, state = 'disconnected') {
-    if (statusText) statusText.textContent = text;
+    const normalizedText =
+      typeof text === 'string' && text.toLowerCase() === 'esperando conexiones'
+        ? 'Esperando conexiones'
+        : text;
+    if (statusText) statusText.textContent = normalizedText;
     if (statusToggle) {
-      const actionLabel = `${text} - Ver conexiones`;
+      const actionLabel = `${normalizedText} - Ver conexiones`;
       statusToggle.setAttribute('aria-label', actionLabel);
       statusToggle.title = actionLabel;
     }
@@ -675,7 +679,7 @@ export function initUiModule({
     if (guestAllowAllInput) {
       suppressGuestControlsSync = true;
       guestAllowAllInput.checked = allowAll;
-      guestAllowAllInput.disabled = !sessionState.isHost || list.length === 0;
+      guestAllowAllInput.disabled = !sessionState.isHost;
       suppressGuestControlsSync = false;
     }
 

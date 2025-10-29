@@ -70,7 +70,9 @@ export function initPagesModule({
 
   const {
     broadcast = noop,
-    requestPageAdd = noop
+    requestPageAdd = noop,
+    requestPageRemove = noop,
+    requestSetActivePage = noop
   } = networkApi;
   const {
     onPagePanelToggle = noop,
@@ -538,10 +540,18 @@ export function initPagesModule({
     return Promise.resolve(true);
   }
 
-  function setActivePage(id, { broadcast: shouldBroadcast = true, fromSync = false } = {}) {
+  function setActivePage(
+    id,
+    { broadcast: shouldBroadcast = true, fromSync = false } = {}
+  ) {
     if (!id) return Promise.resolve(false);
+    const isSamePage = pagesState.activePageId === id;
+    if (!sessionState.isHost && !fromSync) {
+      if (!isSamePage) requestSetActivePage(id);
+      return Promise.resolve(isSamePage);
+    }
     finalizeActiveImageIfPresent();
-    if (pagesState.activePageId === id && !fromSync) {
+    if (isSamePage && !fromSync) {
       if (sessionState.isHost && shouldBroadcast) broadcastPages();
       return Promise.resolve(true);
     }
@@ -591,7 +601,13 @@ export function initPagesModule({
     }
   }
 
-  function removePage(id) {
+  function removePage(id, { fromSync = false } = {}) {
+    if (!id) return;
+    if (!sessionState.isHost && !fromSync) {
+      if (pages.length <= 1) return;
+      requestPageRemove(id);
+      return;
+    }
     if (pages.length <= 1) return;
     finalizeActiveImageIfPresent();
     const index = findPageIndex(id);

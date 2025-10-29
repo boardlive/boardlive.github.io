@@ -28,6 +28,34 @@ export function initNetworkModule({
 
   const guests = sessionState.guests;
 
+  const pendingStrokeActions = new Map();
+
+  function nextActionId(prefix = 'act') {
+    return `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+  }
+
+  function normalizeAuthorId(fallback = null) {
+    if (typeof fallback === 'string' && fallback) return fallback;
+    if (sessionState.peer?.id) return sessionState.peer.id;
+    if (sessionState.clientId) return sessionState.clientId;
+    return nextActionId('author');
+  }
+
+  function sanitizeSegment(segment = {}) {
+    return {
+      x0: segment.x0,
+      y0: segment.y0,
+      cx: segment.cx,
+      cy: segment.cy,
+      x1: segment.x1,
+      y1: segment.y1,
+      color: segment.color,
+      size: segment.size,
+      mode: segment.mode,
+      alpha: segment.alpha
+    };
+  }
+
   const { canvas = null, board = null } = domRefs ?? {};
   const codeInput = domRefs?.inputs?.code ?? null;
 
@@ -56,7 +84,11 @@ export function initNetworkModule({
     adjustGuestView = noop,
     applyBackgroundColor = noop,
     performUndo = noop,
-    performRedo = noop
+    performRedo = noop,
+    ingestAction = noop,
+    setActionActive = () => Promise.resolve(false),
+    rebuildCanvasFromHistory = () => Promise.resolve(),
+    setBaselineImage = noop
   } = canvasApi;
 
   const {
@@ -65,6 +97,7 @@ export function initNetworkModule({
     schedulePageSnapshot = noop,
     serializePages = () => [],
     addNewPage = noop,
+    removePage = noop,
     setActivePage = noop,
     syncPagesFromHost = noop
   } = pagesApi;
@@ -244,16 +277,22 @@ export function initNetworkModule({
     }
   }
 
-  function emitClear() {
+  function emitClear(payload = {}) {
+    const message = {
+      type: 'clear',
+      actionId: payload.actionId || nextActionId('clear'),
+      authorId: payload.authorId || normalizeAuthorId(),
+      pageId: pagesState.activePageId || null
+    };
     if (sessionState.isHost) {
-      broadcast({ type: 'clear' });
+      broadcast(message);
     } else if (
       sessionState.conn &&
       sessionState.conn.open &&
       !sessionState.remoteLock
     ) {
       try {
-        sessionState.conn.send({ type: 'clear' });
+        sessionState.conn.send(message);
       } catch (err) {
         console.warn('No se pudo enviar el evento clear.', err);
       }
@@ -288,6 +327,40 @@ export function initNetworkModule({
       sessionState.conn.send(payload);
     } catch (err) {
       console.warn('No se pudo solicitar al anfitrión una nueva página.', err);
+    }
+  }
+
+  function requestPageRemove(id) {
+    if (!id) return;
+    if (sessionState.isHost) {
+      removePage(id);
+      return;
+    }
+    if (!sessionState.conn || !sessionState.conn.open) return;
+    try {
+      sessionState.conn.send({
+        type: 'page-remove',
+        id
+      });
+    } catch (err) {
+      console.warn('No se pudo solicitar al anfitrión eliminar una página.', err);
+    }
+  }
+
+  function requestSetActivePage(id) {
+    if (!id) return;
+    if (sessionState.isHost) {
+      setActivePage(id);
+      return;
+    }
+    if (!sessionState.conn || !sessionState.conn.open) return;
+    try {
+      sessionState.conn.send({
+        type: 'page-set-active',
+        id
+      });
+    } catch (err) {
+      console.warn('No se pudo solicitar al anfitrión cambiar de página.', err);
     }
   }
 
@@ -457,24 +530,49 @@ export function initNetworkModule({
     refreshUi();
   }
 
-  function emitStroke(segment) {
+  function emitStroke(segment = {}) {
     if (!segment) return;
+    const payload = {
+      type: 'stroke',
+      s: segment,
+      actionId: segment.actionId || nextActionId(),
+      authorId: segment.authorId || normalizeAuthorId(),
+      pageId: pagesState.activePageId || null,
+      final: segment.final === true
+    };
+    payload.s.actionId = payload.actionId;
+    payload.s.authorId = payload.authorId;
+    payload.s.final = payload.final;
     if (sessionState.isHost) {
-      broadcast({ type: 'stroke', s: segment });
+      broadcast(payload);
     } else if (
       sessionState.conn &&
       sessionState.conn.open &&
       !sessionState.remoteLock
     ) {
       try {
-        sessionState.conn.send({ type: 'stroke', s: segment });
+        sessionState.conn.send(payload);
       } catch (err) {
         console.warn('No se pudo enviar el trazo al anfitrión.', err);
       }
     }
   }
 
-  function emitShape(payload) {
+  function notifyActionStateFromCanvas(payload = {}) {
+    if (!sessionState.isHost) return;
+    const id = payload.id;
+    if (!id) return;
+    const message = {
+      type: 'action-state',
+      id,
+      active: payload.active !== false,
+      authorId: payload.authorId || normalizeAuthorId(),
+      pageId: payload.pageId || pagesState.activePageId || null
+    };
+    broadcast(message, payload.sourcePeerId || null);
+  }
+
+  function emitShape(payload = {}) {
     if (!payload || !isShapeTool(payload.shape)) return;
     const start = parsePoint(payload.start);
     const end = parsePoint(payload.end);
@@ -486,7 +584,10 @@ export function initNetworkModule({
       end,
       color: payload.color,
       size: payload.size,
-      fill: payload.fill
+      fill: payload.fill,
+      actionId: payload.actionId || nextActionId('shape'),
+      authorId: payload.authorId || normalizeAuthorId(),
+      pageId: pagesState.activePageId || null
     };
     if (
       message.fill === undefined &&
@@ -510,7 +611,7 @@ export function initNetworkModule({
     }
   }
 
-  function emitImage(payload) {
+  function emitImage(payload = {}) {
     if (!payload) return;
     const message = {
       type: 'image',
@@ -518,7 +619,10 @@ export function initNetworkModule({
       x: payload.x,
       y: payload.y,
       width: payload.width,
-      height: payload.height
+      height: payload.height,
+      actionId: payload.actionId || nextActionId('image'),
+      authorId: payload.authorId || normalizeAuthorId(),
+      pageId: pagesState.activePageId || null
     };
     if (sessionState.isHost) {
       broadcast(message);
@@ -544,11 +648,44 @@ export function initNetworkModule({
     switch (msg.type) {
       case 'stroke': {
         finalizeActiveImageIfPresent();
-        const segment = msg.s;
-        if (!segment) break;
+        const segment = msg.s || {};
+        const actionId =
+          segment.actionId || msg.actionId || nextActionId('stroke');
+        const authorId =
+          segment.authorId ||
+          msg.authorId ||
+          (source ? source.peer : normalizeAuthorId());
+        const pageId = msg.pageId || pagesState.activePageId || null;
+        const entryKey = actionId;
+        if (!pendingStrokeActions.has(entryKey)) {
+          pendingStrokeActions.set(entryKey, {
+            id: actionId,
+            authorId,
+            pageId,
+            type: 'stroke',
+            segments: []
+          });
+        }
+        const entry = pendingStrokeActions.get(entryKey);
+        if (entry) {
+          entry.segments.push(sanitizeSegment(segment));
+        }
         drawSegment(segment);
+        const isFinal = segment.final === true || msg.final === true;
+        if (isFinal && entry) {
+          pendingStrokeActions.delete(entryKey);
+          ingestAction(entry, { apply: false });
+        }
         if (sessionState.isHost) {
-          broadcast(msg, source?.peer);
+          const forward = {
+            type: 'stroke',
+            s: segment,
+            actionId,
+            authorId,
+            pageId,
+            final: isFinal
+          };
+          broadcast(forward, source?.peer);
         }
         break;
       }
@@ -556,6 +693,24 @@ export function initNetworkModule({
         finalizeActiveImageIfPresent();
         cancelActiveImage();
         clearCanvas();
+        {
+          const actionId = msg.actionId || nextActionId('clear');
+          const authorId =
+            msg.authorId || (source ? source.peer : normalizeAuthorId());
+          const pageId = msg.pageId || pagesState.activePageId || null;
+          msg.actionId = actionId;
+          msg.authorId = authorId;
+          msg.pageId = pageId;
+          ingestAction(
+            {
+              id: actionId,
+              authorId,
+              type: 'clear',
+              pageId
+            },
+            { apply: false }
+          );
+        }
         if (sessionState.isHost) {
           broadcast(msg, source?.peer);
         }
@@ -580,7 +735,16 @@ export function initNetworkModule({
               allowed = !!entry?.canDraw;
             }
           }
-          if (allowed) performUndo();
+          if (allowed) {
+            const authorId = source ? source.peer : normalizeAuthorId();
+            performUndo({
+              authorId,
+              broadcast: true,
+              announce: true,
+              sourcePeerId: source?.peer,
+              notifyNetwork: false
+            });
+          }
         }
         break;
       case 'redo':
@@ -594,15 +758,39 @@ export function initNetworkModule({
               allowed = !!entry?.canDraw;
             }
           }
-          if (allowed) performRedo();
+          if (allowed) {
+            const authorId = source ? source.peer : normalizeAuthorId();
+            performRedo({
+              authorId,
+              broadcast: true,
+              announce: true,
+              sourcePeerId: source?.peer,
+              notifyNetwork: false
+            });
+          }
         }
         break;
+      case 'action-state': {
+        const actionId = msg.id;
+        if (!actionId) break;
+        const pageId = msg.pageId || pagesState.activePageId || null;
+        setActionActive(actionId, msg.active !== false, { pageId }).then(
+          () => {
+            if (!sessionState.isHost) {
+              renderPageThumbnails({ force: true });
+            }
+          }
+        );
+        if (sessionState.isHost && source) {
+          broadcast(msg, source.peer);
+        }
+        break;
+      }
       case 'shape': {
         finalizeActiveImageIfPresent();
         const start = parsePoint(msg.start);
         const end = parsePoint(msg.end);
         if (!start || !end || !msg.shape) break;
-        if (sessionState.isHost) beginHistoryAction();
         const fallbackColor = toolStrokeColor(msg.shape);
         const fallbackSize = getToolSize(msg.shape);
         const fill =
@@ -622,11 +810,33 @@ export function initNetworkModule({
           size: Number.isFinite(msg.size) ? msg.size : fallbackSize,
           fill
         });
+        const actionId = msg.actionId || nextActionId('shape');
+        const authorId =
+          msg.authorId || (source ? source.peer : normalizeAuthorId());
+        const pageId = msg.pageId || pagesState.activePageId || null;
+        msg.actionId = actionId;
+        msg.authorId = authorId;
+        msg.pageId = pageId;
+        ingestAction(
+          {
+            id: actionId,
+            authorId,
+            type: 'shape',
+            shape: msg.shape,
+            start,
+            end,
+            color:
+              typeof msg.color === 'string' ? msg.color : fallbackColor,
+            size: Number.isFinite(msg.size) ? msg.size : fallbackSize,
+            fill,
+            pageId
+          },
+          { apply: false }
+        );
         if (!sessionState.isHost) {
           renderPageThumbnails({ force: true });
         }
         if (sessionState.isHost) {
-          commitHistoryAction();
           schedulePageSnapshot();
           broadcast(msg, source?.peer);
         }
@@ -635,33 +845,54 @@ export function initNetworkModule({
       case 'image':
         finalizeActiveImageIfPresent();
         if (typeof msg.dataUrl === 'string') {
-          if (sessionState.isHost) beginHistoryAction();
-          drawImageFromDataUrl({
+          const actionId = msg.actionId || nextActionId('image');
+          const authorId =
+            msg.authorId || (source ? source.peer : normalizeAuthorId());
+          const pageId = msg.pageId || pagesState.activePageId || null;
+          msg.actionId = actionId;
+          msg.authorId = authorId;
+          msg.pageId = pageId;
+          const drawPromise = drawImageFromDataUrl({
             dataUrl: msg.dataUrl,
             x: Number.isFinite(msg.x) ? msg.x : 0,
             y: Number.isFinite(msg.y) ? msg.y : 0,
             width: Number.isFinite(msg.width) ? msg.width : undefined,
             height: Number.isFinite(msg.height) ? msg.height : undefined
-          }).then(changed => {
-            if (sessionState.isHost) {
-              if (changed) {
-                commitHistoryAction();
+          });
+          drawPromise.then(changed => {
+            if (changed) {
+              ingestAction(
+                {
+                  id: actionId,
+                  authorId,
+                  type: 'image',
+                  dataUrl: msg.dataUrl,
+                  x: Number.isFinite(msg.x) ? msg.x : 0,
+                  y: Number.isFinite(msg.y) ? msg.y : 0,
+                  width: Number.isFinite(msg.width) ? msg.width : undefined,
+                  height: Number.isFinite(msg.height) ? msg.height : undefined,
+                  pageId
+                },
+                { apply: false }
+              );
+              if (sessionState.isHost) {
                 schedulePageSnapshot();
                 broadcast(msg, source?.peer);
               } else {
-                canvasState.historyActionStarted = false;
-                updateHistoryUi();
+                renderPageThumbnails({ force: true });
               }
-            } else if (changed) {
-              renderPageThumbnails({ force: true });
             }
           });
         }
         break;
       case 'canvas':
         finalizeActiveImageIfPresent();
+        pendingStrokeActions.clear();
         if (!sessionState.isHost && typeof msg.image === 'string') {
-          applySnapshot(msg.image);
+          Promise.resolve(applySnapshot(msg.image)).then(() => {
+            resetHistory({ baseImage: msg.image });
+            setBaselineImage(msg.image);
+          });
           if (typeof msg.bg === 'string') {
             applyBackground(msg.bg, false);
           }
@@ -717,13 +948,21 @@ export function initNetworkModule({
         break;
       case 'state':
         if (!sessionState.isHost) {
+          pendingStrokeActions.clear();
           let shouldRefresh = false;
           if (Array.isArray(msg.pages) && msg.pages.length) {
             syncPagesFromHost(msg.pages, msg.activePage || msg.active);
             shouldRefresh = true;
-          } else {
-            if (msg.bg) applyBackground(msg.bg, false);
-            if (msg.image) applySnapshot(msg.image);
+          }
+          if (typeof msg.bg === 'string') {
+            applyBackground(msg.bg, false);
+            shouldRefresh = true;
+          }
+          if (typeof msg.image === 'string') {
+            Promise.resolve(applySnapshot(msg.image)).then(() => {
+              resetHistory({ baseImage: msg.image });
+              setBaselineImage(msg.image);
+            });
             shouldRefresh = true;
           }
           if (typeof msg.lock === 'boolean') {
@@ -794,6 +1033,30 @@ export function initNetworkModule({
               image: targetImage || undefined
             });
           });
+        }
+        break;
+      case 'page-remove':
+        if (sessionState.isHost && source) {
+          const entry = getGuestEntry(source.peer);
+          if (!entry || !entry.canDraw) break;
+          if (typeof msg.id === 'string') {
+            removePage(msg.id);
+          }
+        } else if (!sessionState.isHost) {
+          if (typeof msg.id === 'string') {
+            removePage(msg.id, { fromSync: true });
+          }
+        }
+        break;
+      case 'page-set-active':
+        if (sessionState.isHost && source) {
+          const entry = getGuestEntry(source.peer);
+          if (!entry || !entry.canDraw) break;
+          if (typeof msg.id === 'string') {
+            setActivePage(msg.id, { broadcast: true, fromSync: false });
+          }
+        } else if (!sessionState.isHost && typeof msg.id === 'string') {
+          setActivePage(msg.id, { broadcast: false, fromSync: true });
         }
         break;
       case 'page-change':
@@ -880,6 +1143,7 @@ export function initNetworkModule({
       clearTimeout(sessionState.stateRequestTimeout);
       sessionState.stateRequestTimeout = null;
     }
+    pendingStrokeActions.clear();
     applyCanvasWidth();
     applyHostButtonState(hostState);
     applyJoinButtonState(guestState);
@@ -927,10 +1191,11 @@ export function initNetworkModule({
     sessionState.peer = new Peer(id, peerConfig);
     setStatus('creando sesión…', 'pending');
     sessionState.peer.on('open', () => {
+      sessionState.clientId = sessionState.peer?.id || sessionState.clientId;
       applyHostButtonState('active');
       sessionState.shareUrl = buildShareUrl(id);
       updateShareLinkUi();
-      setStatus('esperando conexiones', 'connected');
+      setStatus('Esperando conexiones', 'connected');
     });
     sessionState.peer.on('connection', connection => {
       const info = registerGuestConnection(connection);
@@ -981,6 +1246,7 @@ export function initNetworkModule({
     sessionState.peer = new Peer(null, peerConfig);
     setStatus('conectando…', 'pending');
     sessionState.peer.on('open', () => {
+      sessionState.clientId = sessionState.peer?.id || sessionState.clientId;
       sessionState.conn = sessionState.peer.connect(target, {
         reliable: true
       });
@@ -1082,6 +1348,9 @@ export function initNetworkModule({
     requestStateRefresh,
     requestUndo,
     requestRedo,
-    requestPageAdd
+    requestPageAdd,
+    requestPageRemove,
+    requestSetActivePage,
+    notifyActionStateFromCanvas
   };
 }

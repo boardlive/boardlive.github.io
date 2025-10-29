@@ -49,7 +49,9 @@ const canvasNetworkApi = {
   requestStateRefresh: (...args) =>
     networkModule?.requestStateRefresh(...args),
   requestUndo: (...args) => networkModule?.requestUndo(...args),
-  requestRedo: (...args) => networkModule?.requestRedo(...args)
+  requestRedo: (...args) => networkModule?.requestRedo(...args),
+  notifyActionState: (...args) =>
+    networkModule?.notifyActionStateFromCanvas?.(...args)
 };
 
 const canvasModule = initCanvasModule({
@@ -76,7 +78,11 @@ const pagesModule = initPagesModule({
   canvasApi: canvasModule,
   networkApi: {
     broadcast: (...args) => networkModule?.broadcast(...args),
-    requestPageAdd: (...args) => networkModule?.requestPageAdd(...args)
+    requestPageAdd: (...args) => networkModule?.requestPageAdd(...args),
+    requestPageRemove: (...args) =>
+      networkModule?.requestPageRemove(...args),
+    requestSetActivePage: (...args) =>
+      networkModule?.requestSetActivePage(...args)
   },
   uiApi: {
     onViewToggle: () => uiModule?.updateViewToggle(),
@@ -97,7 +103,8 @@ const {
   syncPagesFromHost,
   enterBoardFullscreen,
   exitBoardFullscreen,
-  addNewPage
+  addNewPage,
+  removePage
 } = pagesModule;
 
 uiModule = initUiModule({
@@ -146,6 +153,7 @@ networkModule = initNetworkModule({
     schedulePageSnapshot,
     serializePages,
     addNewPage,
+    removePage,
     setActivePage,
     syncPagesFromHost
   },

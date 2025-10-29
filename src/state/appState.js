@@ -2,6 +2,7 @@ export const appState = {
   session: {
     peer: null,
     conn: null,
+    clientId: null,
     guests: new Map(),
     guestCounter: 0,
     guestAccessMode: 'host-only',
