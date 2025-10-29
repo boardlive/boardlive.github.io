@@ -1,2 +1,60 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<svg baseProfile="tiny" height="64px" version="1.2" width="64px" xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink"><defs /><rect fill="none" height="64px" width="64px" x="0" y="0" /><rect fill="#e6f2e6" height="30px" rx="4" ry="4" stroke="#333" stroke-width="3" width="48px" x="8" y="14" /><line stroke="#333" stroke-width="3" x1="18" x2="18" y1="44" y2="54" /><line stroke="#333" stroke-width="3" x1="46" x2="46" y1="44" y2="54" /><line stroke="#333" stroke-width="3" x1="40" x2="54" y1="36" y2="50" /><circle cx="54" cy="50" fill="#333" r="3" /><line stroke="#333" stroke-width="3" x1="16" x2="36" y1="28" y2="28" /></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">BoardLive favicon</title>
+  <desc id="desc">Pizarra con trazo y punto rojo de estado en tiempo real.</desc>
+
+  <style>
+    :root {
+      --bg: #0b1220;      /* fondo pastilla */
+      --board: #ffffff;   /* superficie pizarra */
+      --grid: #e2e8f0;    /* cuadrícula sutil */
+      --stroke: #10b981;  /* trazo del rotulador */
+      --frame: #0b1220;   /* marco del icono */
+      --live: #ef4444;    /* punto “live” */
+      --shadow: rgba(0,0,0,0.22);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --board: #0b1220;
+        --grid: #1f2937;
+        --stroke: #34d399;
+        --frame: #e5e7eb;
+        --live: #f87171;
+        --shadow: rgba(0,0,0,0.36);
+      }
+    }
+  </style>
+
+  <!-- pastilla con esquinas redondeadas -->
+  <rect x="8" y="8" width="240" height="240" rx="28" fill="var(--bg)"/>
+
+  <!-- pizarra (ligeramente inset) -->
+  <g transform="translate(0,0)">
+    <rect x="36" y="48" width="184" height="136" rx="10" fill="var(--board)"/>
+    <!-- marco sutil -->
+    <rect x="36" y="48" width="184" height="136" rx="10" fill="none" stroke="var(--frame)" stroke-opacity="0.12" stroke-width="4"/>
+    <!-- cuadrícula ligera (3x2) -->
+    <g stroke="var(--grid)" stroke-width="2" opacity="0.65">
+      <line x1="77" y1="48" x2="77" y2="184"/>
+      <line x1="118" y1="48" x2="118" y2="184"/>
+      <line x1="159" y1="48" x2="159" y2="184"/>
+      <line x1="36" y1="88" x2="220" y2="88"/>
+      <line x1="36" y1="128" x2="220" y2="128"/>
+      <line x1="36" y1="168" x2="220" y2="168"/>
+    </g>
+
+    <!-- trazo estilo rotulador (curva suave) -->
+    <path d="M60 152
+             C78 132, 106 128, 126 142
+             S168 170, 200 138"
+          fill="none" stroke="var(--stroke)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- punto “live” arriba-derecha -->
+    <circle cx="214" cy="42" r="12" fill="var(--live)"/>
+    <circle cx="214" cy="42" r="18" fill="var(--live)" opacity="0.12"/>
+  </g>
+
+  <!-- “pestaña” inferior: pie del caballete -->
+  <rect x="72" y="196" width="112" height="10" rx="5" fill="var(--frame)" opacity="0.18"/>
+  <ellipse cx="128" cy="214" rx="52" ry="6" fill="var(--shadow)"/>
+</svg>
