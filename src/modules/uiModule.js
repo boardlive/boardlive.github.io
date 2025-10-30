@@ -1075,6 +1075,65 @@ export function initUiModule({
     imageInput?.click();
   }
 
+  function extractClipboardImage(event) {
+    const clipboard = event?.clipboardData;
+    if (!clipboard) return null;
+
+    const files = clipboard.files;
+    if (files && files.length) {
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i];
+        if (file && typeof file.type === 'string' && file.type.startsWith('image/')) {
+          return file;
+        }
+      }
+    }
+
+    const items = clipboard.items;
+    if (!items) return null;
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (
+        item &&
+        item.kind === 'file' &&
+        typeof item.type === 'string' &&
+        item.type.startsWith('image/')
+      ) {
+        const file = item.getAsFile?.();
+        if (file) return file;
+      }
+    }
+    return null;
+  }
+
+  function handlePaste(event) {
+    const active = document.activeElement;
+    if (
+      active &&
+      (active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.isContentEditable)
+    ) {
+      return;
+    }
+    if (!sessionState.isHost) {
+      return;
+    }
+
+    const imageFile = extractClipboardImage(event);
+    if (!imageFile) return;
+
+    event.preventDefault();
+    const reader = new FileReader();
+    reader.onload = () => {
+      placeImageOnCanvas(reader.result);
+    };
+    reader.onerror = () => {
+      alert('No se pudo pegar la imagen desde el portapapeles.');
+    };
+    reader.readAsDataURL(imageFile);
+  }
+
   function bindDomListeners() {
     sectionButtons.forEach(btn => {
       btn?.addEventListener('click', () => {
@@ -1155,6 +1214,7 @@ export function initUiModule({
     undoBtn?.addEventListener('click', handleUndoButton);
     redoBtn?.addEventListener('click', handleRedoButton);
     document.addEventListener('keydown', handleKeyboardShortcuts);
+    document.addEventListener('paste', handlePaste);
 
     [insertImageBtn, openImageBtn]
       .filter(Boolean)
