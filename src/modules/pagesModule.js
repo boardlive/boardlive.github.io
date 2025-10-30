@@ -1,4 +1,5 @@
 import { PAGE_PANEL_MARGIN } from '../config/constants.js';
+import { resolveBackgroundSetting } from '../config/backgrounds.js';
 import { clamp } from '../utils/helpers.js';
 
 const noop = () => {};
@@ -378,17 +379,44 @@ export function initPagesModule({
 
   function createPage({
     id = generatePageId(),
-    bg = uiState.currentBackground,
+    bg = undefined,
+    bgPattern = undefined,
+    bgColor = undefined,
     image = null,
     order = null
   } = {}) {
+    const styleFromBg =
+      typeof bg === 'string'
+        ? bg
+        : typeof bg?.style === 'string'
+        ? bg.style
+        : undefined;
+    const patternHint =
+      typeof bg?.pattern === 'string'
+        ? bg.pattern
+        : typeof bgPattern === 'string'
+        ? bgPattern
+        : undefined;
+    const colorHint =
+      typeof bg?.color === 'string'
+        ? bg.color
+        : typeof bgColor === 'string'
+        ? bgColor
+        : undefined;
+    const resolved = resolveBackgroundSetting({
+      style: styleFromBg ?? uiState.currentBackground,
+      pattern: patternHint ?? (styleFromBg ? undefined : uiState.currentBackgroundPattern),
+      color: colorHint ?? (styleFromBg ? undefined : uiState.currentBackgroundColor)
+    });
     pagesState.pageOrderCounter = Math.max(
       pagesState.pageOrderCounter,
       order ?? pagesState.pageOrderCounter
     );
     return {
       id,
-      bg: typeof bg === 'string' ? bg : '#ffffff',
+      bg: resolved.style,
+      bgColor: resolved.color,
+      bgPattern: resolved.pattern,
       image: image ?? null,
       order: order ?? ++pagesState.pageOrderCounter
     };
@@ -437,6 +465,11 @@ export function initPagesModule({
       thumbBtn.type = 'button';
       thumbBtn.className = 'page-thumb';
       thumbBtn.dataset.pageId = page.id;
+      if (page.bg) {
+        thumbBtn.style.background = page.bg;
+      } else {
+        thumbBtn.style.background = '#ffffff';
+      }
       const isActive = page.id === pagesState.activePageId;
       thumbBtn.dataset.active = isActive ? 'true' : 'false';
       thumbBtn.dataset.hasImg = page.image ? 'true' : 'false';
@@ -477,6 +510,8 @@ export function initPagesModule({
     if (!page || !canvas) return;
     syncCanvasResolution({ preserve: true });
     page.bg = uiState.currentBackground;
+    page.bgColor = uiState.currentBackgroundColor;
+    page.bgPattern = uiState.currentBackgroundPattern;
     page.image = canvasSnapshot();
   }
 
@@ -497,7 +532,11 @@ export function initPagesModule({
       return page.image;
     }
     if (page.image) return page.image;
-    return blankPageDataUrl(page.bg);
+    return blankPageDataUrl({
+      style: page.bg,
+      color: page.bgColor,
+      pattern: page.bgPattern
+    });
   }
 
   function serializePages({ refreshActive = false } = {}) {
@@ -505,6 +544,8 @@ export function initPagesModule({
     return pages.map(page => ({
       id: page.id,
       bg: page.bg,
+      bgColor: page.bgColor,
+      bgPattern: page.bgPattern,
       order: page.order,
       image: page.image || (sessionState.isHost ? canvasSnapshot() : null)
     }));
@@ -528,11 +569,19 @@ export function initPagesModule({
 
   function applyPageToCanvas(page) {
     if (!page) {
-      applyBackgroundColor('#ffffff', false);
+      applyBackgroundColor(
+        { style: '#ffffff', pattern: 'solid', color: '#ffffff' },
+        false
+      );
       clearCanvas();
       return Promise.resolve(false);
     }
-    applyBackgroundColor(page.bg || '#ffffff', false);
+    const resolved = resolveBackgroundSetting({
+      style: page.bg,
+      pattern: page.bgPattern,
+      color: page.bgColor
+    });
+    applyBackgroundColor(resolved, false);
     if (page.image) {
       return applySnapshot(page.image);
     }
@@ -575,20 +624,25 @@ export function initPagesModule({
   }
 
   function addNewPage({ bg, image } = {}) {
-    const targetBg =
-      typeof bg === 'string' ? bg : uiState.currentBackground;
+    const resolved =
+      typeof bg === 'object' && bg !== null
+        ? resolveBackgroundSetting(bg)
+        : resolveBackgroundSetting({
+            style: typeof bg === 'string' ? bg : uiState.currentBackground,
+            pattern: uiState.currentBackgroundPattern,
+            color: uiState.currentBackgroundColor
+          });
     if (!sessionState.isHost) {
       requestPageAdd({
         afterId: pagesState.activePageId,
-        bg: targetBg,
+        bg: resolved,
         image
       });
       return;
     }
     finalizeActiveImageIfPresent();
-    const baseBg = targetBg;
     if (sessionState.isHost) saveCurrentPageState();
-    const newPage = createPage({ bg: baseBg, image });
+    const newPage = createPage({ bg: resolved, image });
     const currentIndex = findPageIndex(pagesState.activePageId);
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : pages.length;
     pages.splice(insertAt, 0, newPage);
@@ -618,7 +672,11 @@ export function initPagesModule({
     const wasActive = pages[index].id === pagesState.activePageId;
     pages.splice(index, 1);
     if (!pages.length) {
-      const fallback = createPage({ bg: uiState.currentBackground });
+      const fallback = createPage({
+        bg: uiState.currentBackground,
+        bgPattern: uiState.currentBackgroundPattern,
+        bgColor: uiState.currentBackgroundColor
+      });
       pages.push(fallback);
       pagesState.activePageId = fallback.id;
     } else if (wasActive) {
@@ -652,7 +710,14 @@ export function initPagesModule({
     pagesState.activePageId = initial.id;
     if (!preserveCanvas) {
       clearCanvas();
-      applyBackgroundColor(initial.bg, false);
+      applyBackgroundColor(
+        {
+          style: initial.bg,
+          pattern: initial.bgPattern,
+          color: initial.bgColor
+        },
+        false
+      );
       if (initial.image) {
         applySnapshot(initial.image);
       }
@@ -676,10 +741,10 @@ export function initPagesModule({
       applyPageToCanvas(activePage);
     } else {
       clearCanvas();
-      applyBackgroundColor(bg, false);
+      applyBackgroundColor({ style: bg }, false);
     }
     renderPageThumbnails();
-    applyBackgroundColor(bg);
+    applyBackgroundColor({ style: bg });
     if (sessionState.isHost) {
       broadcastPages();
       broadcastPageChange(pagesState.activePageId);
@@ -802,7 +867,11 @@ export function initPagesModule({
     if (!Array.isArray(list) || list.length === 0) {
       pagesState.pageOrderCounter = 0;
       pages.length = 0;
-      const fallback = createPage({ bg: uiState.currentBackground });
+      const fallback = createPage({
+        bg: uiState.currentBackground,
+        bgPattern: uiState.currentBackgroundPattern,
+        bgColor: uiState.currentBackgroundColor
+      });
       pages.push(fallback);
       pagesState.activePageId = fallback.id;
       applyPageToCanvas(fallback);
@@ -814,7 +883,9 @@ export function initPagesModule({
     list.forEach(item => {
       const page = createPage({
         id: item.id || generatePageId(),
-        bg: item.bg || '#ffffff',
+        bg: item.bg,
+        bgPattern: item.bgPattern,
+        bgColor: item.bgColor,
         image: item.image || null,
         order: item.order ?? null
       });
@@ -839,7 +910,11 @@ export function initPagesModule({
     }
     const snapshots = pages.map(page => ({
       id: page.id,
-      bg: page.bg,
+      bg: {
+        style: page.bg,
+        color: page.bgColor,
+        pattern: page.bgPattern
+      },
       data: snapshotForPage(page)
     }));
     const { jsPDF } = window.jspdf;
@@ -850,7 +925,13 @@ export function initPagesModule({
     const orientation = w >= h ? 'landscape' : 'portrait';
     const pdf = new jsPDF({ orientation, unit: 'px', format: [w, h] });
     snapshots.forEach((snap, index) => {
-      const dataUrl = snap.data || blankPageDataUrl(snap.bg);
+      const dataUrl =
+        snap.data ||
+        blankPageDataUrl({
+          style: snap.bg?.style ?? '#ffffff',
+          color: snap.bg?.color,
+          pattern: snap.bg?.pattern
+        });
       if (index > 0) {
         pdf.addPage([w, h], orientation);
       }

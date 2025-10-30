@@ -42,6 +42,7 @@ const canvasNetworkApi = {
   emitShape: (...args) => networkModule?.emitShape(...args),
   emitClear: (...args) => networkModule?.emitClear(...args),
   emitImage: (...args) => networkModule?.emitImage(...args),
+  emitBackground: (...args) => networkModule?.emitBackground?.(...args),
   emitCanvasSnapshot: (...args) =>
     networkModule?.broadcastCanvasSnapshot(...args),
   emitViewport: (...args) =>

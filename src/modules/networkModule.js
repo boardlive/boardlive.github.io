@@ -1,4 +1,5 @@
 import { peerConfig } from '../config/constants.js';
+import { resolveBackgroundSetting } from '../config/backgrounds.js';
 import { rndCode, sanitizeCode } from '../utils/helpers.js';
 import {
   toolStrokeColor as defaultToolStrokeColor,
@@ -178,6 +179,10 @@ export function initNetworkModule({
         h: height,
         w: width,
         bg: uiState.currentBackground,
+        style: uiState.currentBackground,
+        legacyColor: uiState.currentBackground,
+        bgColor: uiState.currentBackgroundColor,
+        bgPattern: uiState.currentBackgroundPattern,
         lock:
           typeof lockOverride === 'boolean'
             ? lockOverride
@@ -209,15 +214,53 @@ export function initNetworkModule({
     });
   }
 
+  function emitBackground(background) {
+    const resolved = resolveBackgroundSetting(background);
+    if (!sessionState.isHost) return;
+    const payload = {
+      type: 'bg',
+      style: resolved.style,
+      color: resolved.color,
+      pattern: resolved.pattern,
+      legacyColor: resolved.style,
+      bg: {
+        style: resolved.style,
+        color: resolved.color,
+        pattern: resolved.pattern
+      },
+      bgColor: resolved.color,
+      bgPattern: resolved.pattern
+    };
+    broadcast(payload);
+  }
+
   function broadcastCanvasSnapshot({ image, bg } = {}) {
     if (!sessionState.isHost) return;
     const snapshot = image || canvasSnapshot();
-    const background =
-      typeof bg === 'string' ? bg : uiState.currentBackground;
+    const background = resolveBackgroundSetting(
+      typeof bg === 'object' && bg !== null
+        ? bg
+        : {
+            style:
+              typeof bg === 'string' ? bg : uiState.currentBackground,
+            pattern:
+              typeof bg === 'object' && bg !== null && typeof bg.pattern === 'string'
+                ? bg.pattern
+                : undefined,
+            color:
+              typeof bg === 'object' && bg !== null && typeof bg.color === 'string'
+                ? bg.color
+                : undefined
+          }
+    );
     broadcast({
       type: 'canvas',
       image: snapshot,
-      bg: background
+      bg: background.style,
+      legacyColor: background.style,
+      style: background.style,
+      bgColor: background.color,
+      bgPattern: background.pattern
     });
   }
 
@@ -304,9 +347,18 @@ export function initNetworkModule({
     bg = uiState.currentBackground,
     image = null
   } = {}) {
+    const resolved = resolveBackgroundSetting(
+      typeof bg === 'object' && bg !== null
+        ? bg
+        : {
+            style: typeof bg === 'string' ? bg : uiState.currentBackground,
+            pattern: uiState.currentBackgroundPattern,
+            color: uiState.currentBackgroundColor
+          }
+    );
     if (sessionState.isHost) {
       addNewPage({
-        bg,
+        bg: resolved,
         image: typeof image === 'string' ? image : undefined
       });
       return;
@@ -317,9 +369,9 @@ export function initNetworkModule({
       after:
         typeof afterId === 'string' ? afterId : pagesState.activePageId
     };
-    if (typeof bg === 'string') {
-      payload.bg = bg;
-    }
+    payload.bg = resolved.style;
+    payload.bgColor = resolved.color;
+    payload.bgPattern = resolved.pattern;
     if (typeof image === 'string' && image.startsWith('data:')) {
       payload.image = image;
     }
@@ -715,15 +767,42 @@ export function initNetworkModule({
           broadcast(msg, source?.peer);
         }
         break;
-      case 'bg':
+      case 'bg': {
         finalizeActiveImageIfPresent();
-        if (typeof msg.color === 'string') {
-          applyBackground(msg.color, false);
-        }
+        const resolved = resolveBackgroundSetting({
+          pattern:
+            typeof msg.pattern === 'string'
+              ? msg.pattern
+              : typeof msg.bgPattern === 'string'
+              ? msg.bgPattern
+              : typeof msg.bg?.pattern === 'string'
+              ? msg.bg.pattern
+              : undefined,
+          style:
+            typeof msg.style === 'string'
+              ? msg.style
+              : typeof msg.bg === 'string'
+              ? msg.bg
+              : typeof msg.legacyColor === 'string'
+              ? msg.legacyColor
+              : typeof msg.color === 'string'
+              ? msg.color
+              : msg.bg?.style,
+          color:
+            typeof msg.color === 'string'
+              ? msg.color
+              : typeof msg.bgColor === 'string'
+              ? msg.bgColor
+              : typeof msg.bg?.color === 'string'
+              ? msg.bg.color
+              : undefined
+        });
+        applyBackground(resolved, false);
         if (sessionState.isHost) {
           broadcast(msg, source?.peer);
         }
         break;
+      }
       case 'undo':
         if (sessionState.isHost) {
           let allowed = true;
@@ -893,8 +972,39 @@ export function initNetworkModule({
             resetHistory({ baseImage: msg.image });
             setBaselineImage(msg.image);
           });
-          if (typeof msg.bg === 'string') {
-            applyBackground(msg.bg, false);
+          const backgroundPayload =
+            typeof msg.style === 'string' ||
+            typeof msg.bg === 'string' ||
+            (msg.bg && typeof msg.bg === 'object')
+              ? resolveBackgroundSetting({
+                  style:
+                    typeof msg.style === 'string'
+                      ? msg.style
+                      : typeof msg.bg === 'string'
+                      ? msg.bg
+                      : typeof msg.legacyColor === 'string'
+                      ? msg.legacyColor
+                      : typeof msg.color === 'string'
+                      ? msg.color
+                      : msg.bg?.style,
+                  pattern:
+                    typeof msg.bgPattern === 'string'
+                      ? msg.bgPattern
+                      : typeof msg.bg?.pattern === 'string'
+                      ? msg.bg.pattern
+                      : undefined,
+                  color:
+                    typeof msg.bgColor === 'string'
+                      ? msg.bgColor
+                      : typeof msg.color === 'string'
+                      ? msg.color
+                      : typeof msg.bg?.color === 'string'
+                      ? msg.bg.color
+                      : undefined
+                })
+              : null;
+          if (backgroundPayload) {
+            applyBackground(backgroundPayload, false);
           }
         }
         break;
@@ -954,8 +1064,40 @@ export function initNetworkModule({
             syncPagesFromHost(msg.pages, msg.activePage || msg.active);
             shouldRefresh = true;
           }
-          if (typeof msg.bg === 'string') {
-            applyBackground(msg.bg, false);
+          if (
+            typeof msg.style === 'string' ||
+            typeof msg.bg === 'string' ||
+            (msg.bg && typeof msg.bg === 'object')
+          ) {
+            const backgroundPayload = resolveBackgroundSetting({
+              style:
+                typeof msg.style === 'string'
+                  ? msg.style
+                  : typeof msg.bg === 'string'
+                  ? msg.bg
+                  : typeof msg.legacyColor === 'string'
+                  ? msg.legacyColor
+                  : typeof msg.color === 'string'
+                  ? msg.color
+                  : msg.bg?.style,
+              pattern:
+                typeof msg.pattern === 'string'
+                  ? msg.pattern
+                  : typeof msg.bgPattern === 'string'
+                  ? msg.bgPattern
+                  : typeof msg.bg?.pattern === 'string'
+                  ? msg.bg.pattern
+                  : undefined,
+              color:
+                typeof msg.color === 'string'
+                  ? msg.color
+                  : typeof msg.bgColor === 'string'
+                  ? msg.bgColor
+                  : typeof msg.bg?.color === 'string'
+                  ? msg.bg.color
+                  : undefined
+            });
+            applyBackground(backgroundPayload, false);
             shouldRefresh = true;
           }
           if (typeof msg.image === 'string') {
@@ -1010,8 +1152,20 @@ export function initNetworkModule({
         if (sessionState.isHost && source) {
           const entry = getGuestEntry(source.peer);
           if (!entry || !entry.canDraw) break;
-          const targetBg =
-            typeof msg.bg === 'string' ? msg.bg : uiState.currentBackground;
+          const targetBg = resolveBackgroundSetting({
+            style:
+              typeof msg.bg === 'string'
+                ? msg.bg
+                : uiState.currentBackground,
+            pattern:
+              typeof msg.bgPattern === 'string'
+                ? msg.bgPattern
+                : undefined,
+            color:
+              typeof msg.bgColor === 'string'
+                ? msg.bgColor
+                : undefined
+          });
           const targetImage =
             typeof msg.image === 'string' && msg.image.startsWith('data:')
               ? msg.image
@@ -1343,6 +1497,7 @@ export function initNetworkModule({
     emitShape,
     emitImage,
     emitClear,
+    emitBackground,
     broadcastCanvasSnapshot,
     broadcastViewport,
     requestStateRefresh,

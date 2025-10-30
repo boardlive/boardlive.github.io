@@ -36,6 +36,7 @@ export function collectDomRefs() {
       fill: byId('shapeFill'),
       fillTransparent: byId('shapeFillTransparent'),
       background: byId('bg'),
+      backgroundPreset: byId('bgPreset'),
       code: byId('code'),
       guestAllowAll: byId('guestAllowAll'),
       guestSelfName: byId('guestSelfName'),

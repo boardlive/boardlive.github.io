@@ -80,6 +80,8 @@ export const appState = {
     activeSection: 'session',
     qrInstance: null,
     currentBackground: '#ffffff',
+    currentBackgroundColor: '#ffffff',
+    currentBackgroundPattern: 'solid',
     guestPanelOpen: false
   },
   images: {

@@ -3,6 +3,7 @@ import {
   HISTORY_LIMIT,
   IMAGE_MIN_SIZE
 } from '../config/constants.js';
+import { resolveBackgroundSetting } from '../config/backgrounds.js';
 import { clamp } from '../utils/helpers.js';
 import {
   isShapeTool,
@@ -224,6 +225,7 @@ export function initCanvasModule({
     emitShape = noop,
     emitClear = noop,
     emitImage = noop,
+    emitBackground = noop,
     emitCanvasSnapshot = noop,
     emitViewport = noop,
     requestStateRefresh = noop,
@@ -369,13 +371,20 @@ export function initCanvasModule({
     onHistoryUiChange({ undo: undoStack.length, redo: redoStack.length });
   }
 
-  function canvasSnapshot() {
+  function canvasSnapshot({ includeBackground = false } = {}) {
     const off = document.createElement('canvas');
     off.width = canvas.width;
     off.height = canvas.height;
     const offCtx = off.getContext('2d');
-    offCtx.fillStyle = uiState.currentBackground;
-    offCtx.fillRect(0, 0, off.width, off.height);
+    offCtx.clearRect(0, 0, off.width, off.height);
+    if (includeBackground) {
+      const baseColor =
+        typeof uiState.currentBackgroundColor === 'string'
+          ? uiState.currentBackgroundColor
+          : '#ffffff';
+      offCtx.fillStyle = baseColor;
+      offCtx.fillRect(0, 0, off.width, off.height);
+    }
     offCtx.drawImage(canvas, 0, 0);
     return off.toDataURL('image/png');
   }
@@ -601,13 +610,21 @@ export function initCanvasModule({
       if (broadcast) {
         emitCanvasSnapshot({
           image: canvasSnapshot(),
-          bg: uiState.currentBackground
+          bg: {
+            style: uiState.currentBackground,
+            color: uiState.currentBackgroundColor,
+            pattern: uiState.currentBackgroundPattern
+          }
         });
       }
     } else if (broadcast) {
       emitCanvasSnapshot({
         image: canvasSnapshot(),
-        bg: uiState.currentBackground
+        bg: {
+          style: uiState.currentBackground,
+          color: uiState.currentBackgroundColor,
+          pattern: uiState.currentBackgroundPattern
+        }
       });
     }
     updateHistoryUi();
@@ -715,11 +732,14 @@ export function initCanvasModule({
   }
 
   function blankPageDataUrl(bg = '#ffffff') {
+    const resolved = resolveBackgroundSetting(
+      typeof bg === 'object' && bg !== null ? bg : { style: bg }
+    );
     const off = document.createElement('canvas');
     off.width = canvas?.width || 1280;
     off.height = canvas?.height || 720;
     const offCtx = off.getContext('2d');
-    offCtx.fillStyle = bg;
+    offCtx.fillStyle = resolved.color;
     offCtx.fillRect(0, 0, off.width, off.height);
     return off.toDataURL('image/png');
   }
@@ -1817,7 +1837,11 @@ export function initCanvasModule({
     if (sessionState.isHost) {
       emitCanvasSnapshot({
         image: canvasSnapshot(),
-        bg: uiState.currentBackground
+        bg: {
+          style: uiState.currentBackground,
+          color: uiState.currentBackgroundColor,
+          pattern: uiState.currentBackgroundPattern
+        }
       });
     }
   }
@@ -1834,18 +1858,28 @@ export function initCanvasModule({
     });
   }
 
-  function applyBackgroundColor(color, propagate = true) {
-    const target =
-      typeof color === 'string' ? color : uiState.currentBackground;
-    uiState.currentBackground = target;
-    canvas.style.background = target;
-    board.style.background = target;
+  function applyBackgroundColor(input, propagate = true) {
+    const resolved = resolveBackgroundSetting(
+      typeof input === 'object' && input !== null
+        ? input
+        : { style: typeof input === 'string' ? input : undefined }
+    );
+    uiState.currentBackground = resolved.style;
+    uiState.currentBackgroundColor = resolved.color;
+    uiState.currentBackgroundPattern = resolved.pattern;
+    canvas.style.background = resolved.style;
+    board.style.background = resolved.style;
     const activePage = pagesGetActivePage();
     if (activePage) {
-      activePage.bg = target;
+      activePage.bg = resolved.style;
+      activePage.bgColor = resolved.color;
+      activePage.bgPattern = resolved.pattern;
     }
-    if (propagate && typeof pagesApplyBackground === 'function') {
-      pagesApplyBackground(target, propagate);
+    if (typeof pagesApplyBackground === 'function') {
+      pagesApplyBackground(resolved, propagate);
+    }
+    if (propagate && typeof emitBackground === 'function') {
+      emitBackground(resolved);
     }
     if (sessionState.isHost) pagesScheduleSnapshot();
   }

@@ -1,3 +1,4 @@
+import { listBackgroundPresets, resolveBackgroundSetting } from '../config/backgrounds.js';
 import { sanitizeCode } from '../utils/helpers.js';
 
 const noop = () => {};
@@ -22,6 +23,10 @@ export function initUiModule({
   const uiState = appState.ui;
   const imagesState = appState.images;
   const guests = sessionState.guests;
+  const backgroundPresets = listBackgroundPresets();
+  const backgroundPresetById = new Map(
+    backgroundPresets.map(preset => [preset.id, preset])
+  );
 
   const {
     status: statusEl,
@@ -48,6 +53,7 @@ export function initUiModule({
     eraserSize: eraserSizeInput,
     fill: fillInput,
     background: bgInput,
+    backgroundPreset: bgPresetInput,
     code: codeInput,
     guestAllowAll: guestAllowAllInput,
     guestSelfName: guestSelfNameInput,
@@ -312,13 +318,48 @@ export function initUiModule({
     }
   }
 
-  function updateBackgroundInput() {
-    if (!bgInput) return;
-    const disable =
+  function backgroundChangesDisabled() {
+    return (
       !sessionState.isHost &&
-      !!(sessionState.conn && sessionState.conn.open);
-    bgInput.disabled = disable;
-    if (disable) bgInput.value = uiState.currentBackground;
+      !!(sessionState.conn && sessionState.conn.open)
+    );
+  }
+
+  function presetSupportsColor(id) {
+    return !!backgroundPresetById.get(id)?.supportsColor;
+  }
+
+  function populateBackgroundPresetOptions() {
+    if (!bgPresetInput) return;
+    if (bgPresetInput.options.length > 0) return;
+    backgroundPresets.forEach(preset => {
+      const option = document.createElement('option');
+      option.value = preset.id;
+      option.textContent = preset.label;
+      bgPresetInput.appendChild(option);
+    });
+  }
+
+  function updateBackgroundControls() {
+    const disable = backgroundChangesDisabled();
+    if (bgPresetInput) {
+      populateBackgroundPresetOptions();
+      const pattern = uiState.currentBackgroundPattern || 'solid';
+      if (bgPresetInput.value !== pattern) {
+        bgPresetInput.value = pattern;
+      }
+      bgPresetInput.disabled = disable;
+    }
+    if (bgInput) {
+      const supportsColor = presetSupportsColor(
+        uiState.currentBackgroundPattern || 'solid'
+      );
+      const colorValue = uiState.currentBackgroundColor || '#ffffff';
+      if (colorValue && bgInput.value !== colorValue) {
+        bgInput.value = colorValue;
+      }
+      bgInput.disabled = disable || !supportsColor;
+    }
   }
 
   function toggleHidden(elements, hidden) {
@@ -890,7 +931,7 @@ export function initUiModule({
       renderGuestSelfPanel();
     }
     updateGuestControls();
-    updateBackgroundInput();
+    updateBackgroundControls();
     updateEraserLabel();
     updateCodeInputVisibility();
     if (!sessionState.isHost) {
@@ -917,35 +958,69 @@ export function initUiModule({
     updateShareLinkUi();
   }
 
-  function emitBg(color) {
-    if (!sessionState.isHost) return;
-    networkApiRef.broadcast({ type: 'bg', color });
+  function applyBackground(background, propagate = true) {
+    applyBackgroundColor(background, propagate);
   }
 
-  function applyBackground(color, propagate = true) {
-    applyBackgroundColor(color, propagate);
-  }
-
-  function onBackgroundApplied(color, propagate = true) {
-    const target =
-      typeof color === 'string'
-        ? color
-        : uiState.currentBackground;
-    if (bgInput) {
-      bgInput.value = target;
+  function onBackgroundApplied(background, propagate = true) {
+    const resolved = resolveBackgroundSetting(
+      typeof background === 'object' && background !== null
+        ? background
+        : {
+            style:
+              typeof background === 'string'
+                ? background
+                : uiState.currentBackground,
+            pattern: uiState.currentBackgroundPattern,
+            color: uiState.currentBackgroundColor
+          }
+    );
+    uiState.currentBackground = resolved.style;
+    uiState.currentBackgroundColor = resolved.color;
+    uiState.currentBackgroundPattern = resolved.pattern;
+    if (bgPresetInput) {
+      populateBackgroundPresetOptions();
+      if (bgPresetInput.value !== resolved.pattern) {
+        bgPresetInput.value = resolved.pattern;
+      }
     }
-    if (propagate) emitBg(target);
+    if (bgInput) {
+      if (bgInput.value !== resolved.color) {
+        bgInput.value = resolved.color;
+      }
+    }
+    updateBackgroundControls();
   }
 
   function handleBackgroundInput(event) {
     const value = event?.target?.value;
     if (!sessionState.isHost) {
       if (event?.target) {
-        event.target.value = uiState.currentBackground;
+        event.target.value = uiState.currentBackgroundColor || '#ffffff';
       }
       return;
     }
-    applyBackground(value);
+    if (typeof value !== 'string' || !value) return;
+    applyBackground({ pattern: 'solid', color: value });
+  }
+
+  function handleBackgroundPresetChange(event) {
+    const selected = event?.target?.value;
+    if (!sessionState.isHost) {
+      if (bgPresetInput) {
+        bgPresetInput.value = uiState.currentBackgroundPattern || 'solid';
+      }
+      return;
+    }
+    const preset =
+      backgroundPresetById.get(selected) ||
+      backgroundPresetById.get('solid');
+    if (!preset) return;
+    const baseColor = preset.baseColor || '#ffffff';
+    const color = preset.supportsColor
+      ? bgInput?.value || uiState.currentBackgroundColor || baseColor
+      : baseColor;
+    applyBackground({ pattern: preset.id, color });
   }
 
   function handleViewToggle() {
@@ -1202,6 +1277,9 @@ export function initUiModule({
     if (bgInput) {
       bgInput.addEventListener('input', handleBackgroundInput);
     }
+    if (bgPresetInput) {
+      bgPresetInput.addEventListener('change', handleBackgroundPresetChange);
+    }
 
     if (codeInput) {
       codeInput.addEventListener('input', sanitizeCodeInput);
@@ -1224,6 +1302,7 @@ export function initUiModule({
 
   function initialize() {
     statusToggle?.setAttribute('aria-expanded', 'false');
+    populateBackgroundPresetOptions();
     updateGuestPanelView();
     closeGuestPanel();
     applyHostButtonState(sessionState.hostButtonState);
@@ -1238,7 +1317,14 @@ export function initUiModule({
       renderGuestSelfPanel();
     }
     refreshUi();
-    applyBackground(uiState.currentBackground, false);
+    applyBackground(
+      {
+        style: uiState.currentBackground,
+        pattern: uiState.currentBackgroundPattern,
+        color: uiState.currentBackgroundColor
+      },
+      false
+    );
   }
 
   bindDomListeners();
