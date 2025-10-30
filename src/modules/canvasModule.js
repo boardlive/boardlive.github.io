@@ -1867,8 +1867,28 @@ export function initCanvasModule({
     uiState.currentBackground = resolved.style;
     uiState.currentBackgroundColor = resolved.color;
     uiState.currentBackgroundPattern = resolved.pattern;
-    canvas.style.background = resolved.style;
-    board.style.background = resolved.style;
+
+    const applyCssBackground = target => {
+      if (!target) return;
+      const style = resolved.style || '';
+      const color = resolved.color || '#ffffff';
+      const urlIndex = style.indexOf('url(');
+      if (urlIndex >= 0) {
+        const colorPart = style.slice(0, urlIndex).trim() || color;
+        const imagePart = style.slice(urlIndex).trim();
+        target.style.backgroundColor = colorPart;
+        target.style.backgroundImage = imagePart;
+        target.style.backgroundRepeat = 'repeat';
+        target.style.backgroundPosition = '0 0';
+      } else {
+        target.style.backgroundColor = color;
+        target.style.backgroundImage = 'none';
+      }
+    };
+
+    applyCssBackground(canvas);
+    applyCssBackground(board);
+
     const activePage = pagesGetActivePage();
     if (activePage) {
       activePage.bg = resolved.style;
