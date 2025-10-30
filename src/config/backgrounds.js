@@ -29,6 +29,40 @@ function svgBackground({
   return `${baseColor} ${dataUrl}`;
 }
 
+function extractBackgroundImage(style) {
+  if (typeof style !== 'string') return null;
+  const index = style.indexOf('url(');
+  if (index === -1) return null;
+  return style.slice(index).trim();
+}
+
+function finalizeBackground({
+  pattern,
+  color,
+  style,
+  preset = null
+}) {
+  const resolvedStyle =
+    typeof style === 'string' && style.trim().length > 0
+      ? style.trim()
+      : SOLID_BASE_COLOR;
+  const resolvedColor = normalizeColor(color) ?? SOLID_BASE_COLOR;
+  const size =
+    preset && Array.isArray(preset.tileSize)
+      ? {
+          width: Number(preset.tileSize[0]) || null,
+          height: Number(preset.tileSize[1]) || null
+        }
+      : null;
+  return {
+    pattern: pattern || 'solid',
+    color: resolvedColor,
+    style: resolvedStyle,
+    image: extractBackgroundImage(resolvedStyle),
+    size
+  };
+}
+
 const BACKGROUND_PRESETS = [
   {
     id: 'solid',
@@ -48,7 +82,8 @@ const BACKGROUND_PRESETS = [
       baseColor: '#ffffff',
       content:
         '<path d="M0 0H64" stroke="#d1d5db" stroke-width="1"/><path d="M0 32H64" stroke="#e5e7eb" stroke-width="1"/><path d="M0 0V64" stroke="#d1d5db" stroke-width="1"/><path d="M32 0V64" stroke="#e5e7eb" stroke-width="1"/>'
-    })
+    }),
+    tileSize: [64, 64]
   },
   {
     id: 'lined',
@@ -61,7 +96,8 @@ const BACKGROUND_PRESETS = [
       baseColor: '#fbfdff',
       content:
         '<path d="M0 71.5H8" stroke="#60a5fa" stroke-width="1.5"/>'
-    })
+    }),
+    tileSize: [8, 72]
   },
   {
     id: 'pentagram',
@@ -74,7 +110,8 @@ const BACKGROUND_PRESETS = [
       baseColor: '#fffdf5',
       content:
         '<path d="M0 28H8" stroke="#2563eb" stroke-width="1"/><path d="M0 42H8" stroke="#2563eb" stroke-width="1"/><path d="M0 56H8" stroke="#2563eb" stroke-width="1"/><path d="M0 70H8" stroke="#2563eb" stroke-width="1"/><path d="M0 84H8" stroke="#2563eb" stroke-width="1"/>'
-    })
+    }),
+    tileSize: [8, 120]
   },
   {
     id: 'millimeter',
@@ -87,7 +124,8 @@ const BACKGROUND_PRESETS = [
       baseColor: '#ffffff',
       content:
         '<path d="M0 0H16" stroke="#dbeafe" stroke-width="0.5"/><path d="M0 8H16" stroke="#bfdbfe" stroke-width="0.5" opacity="0.7"/><path d="M0 0V16" stroke="#dbeafe" stroke-width="0.5"/><path d="M8 0V16" stroke="#bfdbfe" stroke-width="0.5" opacity="0.7"/>'
-    })
+    }),
+    tileSize: [16, 16]
   },
   {
     id: 'large-grid',
@@ -100,7 +138,8 @@ const BACKGROUND_PRESETS = [
       baseColor: '#ffffff',
       content:
         '<path d="M0 0H96" stroke="#cbd5f5" stroke-width="1.5"/><path d="M0 48H96" stroke="#e5e7eb" stroke-width="1"/><path d="M0 0V96" stroke="#cbd5f5" stroke-width="1.5"/><path d="M48 0V96" stroke="#e5e7eb" stroke-width="1"/>'
-    })
+    }),
+    tileSize: [96, 96]
   },
   {
     id: 'double-lines',
@@ -113,7 +152,8 @@ const BACKGROUND_PRESETS = [
       baseColor: '#fffefa',
       content:
         '<path d="M0 42H8" stroke="#2563eb" stroke-width="1.5" opacity="0.9"/><path d="M0 60H8" stroke="#dc2626" stroke-width="1.5" opacity="0.9"/><path d="M0 78H8" stroke="#2563eb" stroke-width="1.5" opacity="0.9"/>'
-    })
+    }),
+    tileSize: [8, 120]
   }
 ];
 
@@ -141,17 +181,19 @@ export function resolveBackgroundSetting({
     const preset = PATTERN_BY_ID.get(pattern);
     if (preset.supportsColor) {
       const normalized = normalizeColor(color) ?? preset.baseColor;
-      return {
+      return finalizeBackground({
         pattern: preset.id,
         color: normalized,
-        style: normalized
-      };
+        style: normalized,
+        preset
+      });
     }
-    return {
+    return finalizeBackground({
       pattern: preset.id,
       color: preset.baseColor,
-      style: preset.style
-    };
+      style: preset.style,
+      preset
+    });
   }
 
   if (typeof style === 'string') {
@@ -159,38 +201,39 @@ export function resolveBackgroundSetting({
     if (STYLE_TO_PATTERN.has(trimmed)) {
       const presetId = STYLE_TO_PATTERN.get(trimmed);
       const preset = PATTERN_BY_ID.get(presetId);
-      return {
+      return finalizeBackground({
         pattern: preset.id,
         color: preset.baseColor,
-        style: preset.style
-      };
+        style: preset.style,
+        preset
+      });
     }
     const normalized = normalizeColor(trimmed);
     if (normalized) {
-      return {
+      return finalizeBackground({
         pattern: 'solid',
         color: normalized,
         style: normalized
-      };
+      });
     }
   }
 
   if (typeof color === 'string') {
     const normalized = normalizeColor(color);
     if (normalized) {
-      return {
+      return finalizeBackground({
         pattern: 'solid',
         color: normalized,
         style: normalized
-      };
+      });
     }
   }
 
-  return {
+  return finalizeBackground({
     pattern: 'solid',
     color: SOLID_BASE_COLOR,
     style: SOLID_BASE_COLOR
-  };
+  });
 }
 
 export function detectBackgroundPattern(style) {

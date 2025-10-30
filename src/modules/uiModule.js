@@ -159,6 +159,19 @@ export function initUiModule({
     uiState.currentBackground =
       bgInput.value || uiState.currentBackground || '#ffffff';
   }
+  const initialBackground = resolveBackgroundSetting({
+    style: uiState.currentBackground,
+    pattern: uiState.currentBackgroundPattern,
+    color: uiState.currentBackgroundColor
+  });
+  uiState.currentBackground = initialBackground.style;
+  uiState.currentBackgroundColor = initialBackground.color;
+  uiState.currentBackgroundPattern = initialBackground.pattern;
+  uiState.currentBackgroundImage = initialBackground.image;
+  uiState.currentBackgroundSize = initialBackground.size;
+  if (bgInput && bgInput.value !== initialBackground.color) {
+    bgInput.value = initialBackground.color;
+  }
   uiState.boardExpanded ??= false;
   uiState.restoreToolSettingsOnExpand ??= false;
   canvasState.historyActionStarted ??= false;
@@ -978,6 +991,8 @@ export function initUiModule({
     uiState.currentBackground = resolved.style;
     uiState.currentBackgroundColor = resolved.color;
     uiState.currentBackgroundPattern = resolved.pattern;
+    uiState.currentBackgroundImage = resolved.image;
+    uiState.currentBackgroundSize = resolved.size;
     if (bgPresetInput) {
       populateBackgroundPresetOptions();
       if (bgPresetInput.value !== resolved.pattern) {

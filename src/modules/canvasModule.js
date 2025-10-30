@@ -287,7 +287,7 @@ export function initCanvasModule({
     onHistoryUiChange = noop
   } = uiApi;
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   canvasState.lastViewportHeight ??= null;
   canvasState.lastViewportWidth ??= null;
@@ -1867,40 +1867,80 @@ export function initCanvasModule({
     uiState.currentBackground = resolved.style;
     uiState.currentBackgroundColor = resolved.color;
     uiState.currentBackgroundPattern = resolved.pattern;
+    uiState.currentBackgroundImage = resolved.image;
+    uiState.currentBackgroundSize = resolved.size;
 
-    const applyCssBackground = target => {
-      if (!target) return;
-      const styleValue = resolved.style || '';
-      const colorValue = resolved.color || '#ffffff';
-      const hasPattern = styleValue.includes('url(');
+    const withCacheBuster = value => {
+      if (typeof value !== 'string') return value;
+      const match = value.match(/^url\((['"]?)(.*?)(\1)\)$/);
+      if (!match) return value;
+      const quote = match[1] || '';
+      const inner = match[2];
+      const fragmentIndex = inner.indexOf('#');
+      const base = fragmentIndex >= 0 ? inner.slice(0, fragmentIndex) : inner;
+      const cacheId = `${Date.now().toString(36)}${Math.random()
+        .toString(36)
+        .slice(2, 7)}`;
+      return `url(${quote}${base}#${cacheId}${quote})`;
+    };
 
-      target.style.setProperty('background-color', colorValue);
+    const colorValue = resolved.color || '#ffffff';
+    const imageValue = resolved.image;
 
-      if (hasPattern) {
-        const imageValue = styleValue.slice(styleValue.indexOf('url(')).trim();
-        target.style.removeProperty('background-image');
-        target.style.removeProperty('background-repeat');
-        target.style.removeProperty('background-position');
-        // Force reflow so Chrome repaints after swapping the background image
-        void target.offsetHeight;
-        target.style.setProperty('background-image', imageValue);
-        target.style.setProperty('background-repeat', 'repeat');
-        target.style.setProperty('background-position', '0 0');
+    const applyCanvasBackground = () => {
+      if (!canvas) return;
+      canvas.style.removeProperty('background');
+      canvas.style.removeProperty('background-image');
+      canvas.style.removeProperty('background-repeat');
+      canvas.style.removeProperty('background-position');
+      canvas.style.removeProperty('background-attachment');
+      canvas.style.removeProperty('background-size');
+      if (imageValue) {
+        void canvas.offsetHeight;
+        canvas.style.backgroundColor = 'transparent';
+        canvas.style.backgroundImage = 'none';
       } else {
-        target.style.removeProperty('background-image');
-        target.style.removeProperty('background-repeat');
-        target.style.removeProperty('background-position');
+        canvas.style.backgroundColor = colorValue;
+        canvas.style.backgroundImage = 'none';
       }
     };
 
-    applyCssBackground(canvas);
-    applyCssBackground(board);
+    const applyBoardBackground = () => {
+      if (!board) return;
+      board.style.removeProperty('background-size');
+      board.style.removeProperty('background-origin');
+      board.style.removeProperty('background-attachment');
+      board.style.backgroundColor = colorValue;
+      if (imageValue) {
+        board.style.backgroundImage = 'none';
+        void board.offsetHeight;
+        const cacheBustedImage = withCacheBuster(imageValue);
+        board.style.backgroundImage = cacheBustedImage;
+        board.style.backgroundRepeat = 'repeat';
+        board.style.backgroundPosition = '0 0';
+        if (
+          resolved.size &&
+          Number.isFinite(resolved.size.width) &&
+          Number.isFinite(resolved.size.height)
+        ) {
+          board.style.backgroundSize = `${resolved.size.width}px ${resolved.size.height}px`;
+        }
+      } else {
+        board.style.backgroundImage = 'none';
+        board.style.removeProperty('background-repeat');
+        board.style.removeProperty('background-position');
+      }
+    };
+
+    applyCanvasBackground();
+    applyBoardBackground();
 
     const activePage = pagesGetActivePage();
     if (activePage) {
       activePage.bg = resolved.style;
       activePage.bgColor = resolved.color;
       activePage.bgPattern = resolved.pattern;
+      activePage.bgImage = resolved.image;
     }
     if (typeof pagesApplyBackground === 'function') {
       pagesApplyBackground(resolved, propagate);

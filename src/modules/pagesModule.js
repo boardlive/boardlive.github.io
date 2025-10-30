@@ -382,6 +382,8 @@ export function initPagesModule({
     bg = undefined,
     bgPattern = undefined,
     bgColor = undefined,
+    bgImage = undefined,
+    bgSize = undefined,
     image = null,
     order = null
   } = {}) {
@@ -412,11 +414,24 @@ export function initPagesModule({
       pagesState.pageOrderCounter,
       order ?? pagesState.pageOrderCounter
     );
+    const imageValue =
+      typeof bgImage === 'string' && bgImage.includes('url(')
+        ? bgImage.trim()
+        : resolved.image ?? null;
+    const sizeValue =
+      bgSize && typeof bgSize === 'object'
+        ? {
+            width: Number(bgSize.width) || null,
+            height: Number(bgSize.height) || null
+          }
+        : resolved.size || null;
     return {
       id,
       bg: resolved.style,
       bgColor: resolved.color,
       bgPattern: resolved.pattern,
+      bgImage: imageValue,
+      bgSize: sizeValue,
       image: image ?? null,
       order: order ?? ++pagesState.pageOrderCounter
     };
@@ -512,6 +527,13 @@ export function initPagesModule({
     page.bg = uiState.currentBackground;
     page.bgColor = uiState.currentBackgroundColor;
     page.bgPattern = uiState.currentBackgroundPattern;
+    page.bgImage = uiState.currentBackgroundImage ?? null;
+    page.bgSize = uiState.currentBackgroundSize
+      ? {
+          width: uiState.currentBackgroundSize.width ?? null,
+          height: uiState.currentBackgroundSize.height ?? null
+        }
+      : null;
     page.image = canvasSnapshot();
   }
 
@@ -546,6 +568,8 @@ export function initPagesModule({
       bg: page.bg,
       bgColor: page.bgColor,
       bgPattern: page.bgPattern,
+      bgImage: page.bgImage ?? null,
+      bgSize: page.bgSize ?? null,
       order: page.order,
       image: page.image || (sessionState.isHost ? canvasSnapshot() : null)
     }));
@@ -886,6 +910,8 @@ export function initPagesModule({
         bg: item.bg,
         bgPattern: item.bgPattern,
         bgColor: item.bgColor,
+        bgImage: item.bgImage,
+        bgSize: item.bgSize,
         image: item.image || null,
         order: item.order ?? null
       });

@@ -222,14 +222,19 @@ export function initNetworkModule({
       style: resolved.style,
       color: resolved.color,
       pattern: resolved.pattern,
+      size: resolved.size,
+      image: resolved.image,
       legacyColor: resolved.style,
       bg: {
         style: resolved.style,
         color: resolved.color,
-        pattern: resolved.pattern
+        pattern: resolved.pattern,
+        image: resolved.image,
+        size: resolved.size
       },
       bgColor: resolved.color,
-      bgPattern: resolved.pattern
+      bgPattern: resolved.pattern,
+      bgSize: resolved.size
     };
     broadcast(payload);
   }
@@ -257,6 +262,8 @@ export function initNetworkModule({
       type: 'canvas',
       image: snapshot,
       bg: background.style,
+      bgImage: background.image,
+      bgSize: background.size,
       legacyColor: background.style,
       style: background.style,
       bgColor: background.color,

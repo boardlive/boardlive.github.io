@@ -81,6 +81,8 @@ export const appState = {
     qrInstance: null,
     currentBackground: '#ffffff',
     currentBackgroundColor: '#ffffff',
+    currentBackgroundImage: null,
+    currentBackgroundSize: null,
     currentBackgroundPattern: 'solid',
     guestPanelOpen: false
   },
