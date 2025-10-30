@@ -1870,19 +1870,26 @@ export function initCanvasModule({
 
     const applyCssBackground = target => {
       if (!target) return;
-      const style = resolved.style || '';
-      const color = resolved.color || '#ffffff';
-      const urlIndex = style.indexOf('url(');
-      if (urlIndex >= 0) {
-        const colorPart = style.slice(0, urlIndex).trim() || color;
-        const imagePart = style.slice(urlIndex).trim();
-        target.style.backgroundColor = colorPart;
-        target.style.backgroundImage = imagePart;
-        target.style.backgroundRepeat = 'repeat';
-        target.style.backgroundPosition = '0 0';
+      const styleValue = resolved.style || '';
+      const colorValue = resolved.color || '#ffffff';
+      const hasPattern = styleValue.includes('url(');
+
+      target.style.setProperty('background-color', colorValue);
+
+      if (hasPattern) {
+        const imageValue = styleValue.slice(styleValue.indexOf('url(')).trim();
+        target.style.removeProperty('background-image');
+        target.style.removeProperty('background-repeat');
+        target.style.removeProperty('background-position');
+        // Force reflow so Chrome repaints after swapping the background image
+        void target.offsetHeight;
+        target.style.setProperty('background-image', imageValue);
+        target.style.setProperty('background-repeat', 'repeat');
+        target.style.setProperty('background-position', '0 0');
       } else {
-        target.style.backgroundColor = color;
-        target.style.backgroundImage = 'none';
+        target.style.removeProperty('background-image');
+        target.style.removeProperty('background-repeat');
+        target.style.removeProperty('background-position');
       }
     };
 
