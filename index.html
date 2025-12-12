@@ -87,6 +87,7 @@
         <button class="btn tool-btn" type="button" data-tool="pen" aria-selected="true" title="Trazo libre">✏️ Trazo</button>
         <button class="btn tool-btn" type="button" data-tool="line" aria-selected="false" title="Dibujar línea recta">➖ Línea</button>
         <button class="btn tool-btn" type="button" data-tool="arrow" aria-selected="false" title="Dibujar flechas">➡️ Flecha</button>
+        <button class="btn tool-btn" type="button" data-tool="text" aria-selected="false" title="Añadir texto">🔤 Texto</button>
         <button class="btn tool-btn" type="button" data-tool="rect" aria-selected="false" title="Dibujar rectángulo">⬛ Rectángulo</button>
         <button class="btn tool-btn" type="button" data-tool="ellipse" aria-selected="false" title="Dibujar círculo o elipse">⚪ Círculo</button>
         <button class="btn tool-btn" type="button" data-tool="highlight" aria-selected="false" title="Resaltador semitransparente">🟡 Resaltador</button>
@@ -102,6 +103,16 @@
           <label class="tool-setting" data-field="size" for="size">
             <span id="sizeLabel">Grosor (px)</span>
             <input id="size" type="number" min="1" max="100" value="4" />
+          </label>
+          <label class="tool-setting" data-field="font" id="fontSetting" for="fontFamily" hidden>
+            <span>Fuente</span>
+            <select id="fontFamily">
+              <option value="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">Inter (predeterminado)</option>
+              <option value="Arial, Helvetica, sans-serif">Arial</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="\"Courier New\", Courier, monospace">Courier New</option>
+              <option value="\"Comic Sans MS\", \"Comic Sans\", cursive">Comic Sans</option>
+            </select>
           </label>
           <label class="tool-setting" data-field="fill" id="fillSetting" for="shapeFill" hidden>
             <span id="fillLabel">Relleno</span>
@@ -133,6 +144,17 @@
     <div class="board" id="board">
       <canvas id="canvas" style="height: calc(100vh - 56px);"></canvas>
       <div id="eraserCursor" aria-hidden="true"></div>
+      <div id="textInputOverlay" class="text-input-overlay" hidden>
+        <div class="text-input-head">
+          <strong>Texto</strong>
+          <div class="text-input-actions">
+            <button id="textApplyBtn" class="btn" type="button">Aplicar</button>
+            <button id="textCancelBtn" class="btn" type="button">Cancelar</button>
+          </div>
+        </div>
+        <textarea id="textInputArea" spellcheck="false" placeholder="Escribe aquí tu texto"></textarea>
+        <div class="text-input-hint">Arrastra desde la esquina inferior derecha para ajustar el cuadro. Usa Ctrl+Enter para aplicar.</div>
+      </div>
       <button id="boardRestoreBtn" class="board-restore-btn" type="button" aria-label="Restaurar vista" title="Restaurar vista" hidden></button>
     </div>
   </div>

@@ -40,6 +40,7 @@ const {
 const canvasNetworkApi = {
   emitStroke: (...args) => networkModule?.emitStroke(...args),
   emitShape: (...args) => networkModule?.emitShape(...args),
+  emitText: (...args) => networkModule?.emitText(...args),
   emitClear: (...args) => networkModule?.emitClear(...args),
   emitImage: (...args) => networkModule?.emitImage(...args),
   emitBackground: (...args) => networkModule?.emitBackground?.(...args),

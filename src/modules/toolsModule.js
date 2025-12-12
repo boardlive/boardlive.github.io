@@ -124,6 +124,27 @@ export function setToolFillColor(tool, value) {
   return settings.fill;
 }
 
+function defaultFontFor(tool) {
+  const defaults = TOOL_DEFAULTS[tool] || {};
+  return defaults.font || TOOL_DEFAULTS.text?.font || TOOL_DEFAULTS.pen?.font || 'Inter, system-ui, sans-serif';
+}
+
+export function getToolFont(tool) {
+  const settings = ensureToolSettings(tool);
+  const font = typeof settings.font === 'string' ? settings.font : '';
+  return font && font.trim().length > 0 ? font : defaultFontFor(tool);
+}
+
+export function setToolFont(tool, value) {
+  const settings = ensureToolSettings(tool);
+  if (typeof value === 'string' && value.trim().length > 0) {
+    settings.font = value;
+  } else {
+    settings.font = defaultFontFor(tool);
+  }
+  return settings.font;
+}
+
 export function getEraserSize() {
   return eraserSize;
 }
@@ -168,7 +189,8 @@ export function initToolsModule({ appState, domRefs }) {
     size: sizeInput,
     fill: fillInput,
     fillTransparent: fillTransparentInput,
-    eraserSize: eraserSizeInput
+    eraserSize: eraserSizeInput,
+    font: fontInput
   } = inputs;
 
   const {
@@ -191,6 +213,7 @@ export function initToolsModule({ appState, domRefs }) {
     strokeSetting,
     sizeSetting,
     eraserSetting,
+    fontSetting,
     fillSetting,
     toolSettingsTitle,
     toolSettingsHint,
@@ -422,6 +445,7 @@ export function initToolsModule({ appState, domRefs }) {
   function updateToolSettingsUi() {
     const tool = canvasState.erasing ? 'eraser' : toolsState.currentTool;
     const copy = TOOL_UI_COPY[tool] || TOOL_UI_COPY.pen;
+    const showFont = tool === 'text';
     if (toolsState.toolSettingsPane === 'tool') {
       if (toolSettingsTitle) {
         toolSettingsTitle.textContent = copy.title || 'Herramienta';
@@ -438,6 +462,7 @@ export function initToolsModule({ appState, domRefs }) {
     toggleToolSetting(strokeSetting, showStroke);
     toggleToolSetting(sizeSetting, showSize);
     toggleToolSetting(eraserSetting, tool === 'eraser');
+    toggleToolSetting(fontSetting, showFont);
 
     if (showStroke && strokeLabelEl) {
       strokeLabelEl.textContent = copy.stroke || 'Color';
@@ -451,6 +476,12 @@ export function initToolsModule({ appState, domRefs }) {
     }
     if (showSize && sizeInput) {
       sizeInput.value = String(getToolSize(tool));
+    }
+
+    if (showFont && fontInput) {
+      fontInput.value = getToolFont(tool);
+    } else if (fontInput) {
+      fontInput.value = '';
     }
 
     if (fillSetting) {
@@ -474,6 +505,13 @@ export function initToolsModule({ appState, domRefs }) {
 
     if (tool === 'eraser' && eraserSizeInput) {
       eraserSizeInput.value = String(getEraserSize());
+    }
+
+    if (fontSetting) {
+      const label = fontSetting.querySelector('span');
+      if (label) {
+        label.textContent = copy.font || 'Fuente';
+      }
     }
   }
 
@@ -588,7 +626,7 @@ export function initToolsModule({ appState, domRefs }) {
       }
       return;
     }
-    const allowed = ['pen', 'line', 'arrow', 'rect', 'ellipse', 'highlight'];
+    const allowed = ['pen', 'line', 'arrow', 'text', 'rect', 'ellipse', 'highlight'];
     const next = allowed.includes(tool) ? tool : 'pen';
     toolsState.currentTool = next;
     if (canvasState.erasing) {
@@ -847,6 +885,11 @@ export function initToolsModule({ appState, domRefs }) {
     updateEraserCursorSize();
   });
 
+  fontInput?.addEventListener('change', () => {
+    const font = setToolFont(toolsState.currentTool, fontInput.value);
+    fontInput.value = font;
+  });
+
   eraserBtn?.addEventListener('click', () => {
     if (eraserBtn.disabled) return;
     setCurrentTool('eraser');
@@ -912,6 +955,8 @@ export function initToolsModule({ appState, domRefs }) {
     updateToolTriggerLabel,
     setToolSettingsPinned,
     resetToolPreferences,
+    getToolFont,
+    setToolFont,
     disconnect: () => {
       if (headerResizeObserver) {
         try {

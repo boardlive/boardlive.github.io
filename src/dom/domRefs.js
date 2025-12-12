@@ -35,6 +35,7 @@ export function collectDomRefs() {
       eraserSize: byId('eraserSize'),
       fill: byId('shapeFill'),
       fillTransparent: byId('shapeFillTransparent'),
+      font: byId('fontFamily'),
       background: byId('bg'),
       backgroundPreset: byId('bgPreset'),
       code: byId('code'),
@@ -93,6 +94,8 @@ export function collectDomRefs() {
         toolSettingsPanel?.querySelector('[data-field="stroke"]') ?? null,
       sizeSetting:
         toolSettingsPanel?.querySelector('[data-field="size"]') ?? null,
+      fontSetting:
+        toolSettingsPanel?.querySelector('[data-field="font"]') ?? null,
       eraserSetting:
         toolSettingsPanel?.querySelector('[data-field="eraser"]') ?? null,
       fillSetting: byId('fillSetting'),
@@ -114,6 +117,10 @@ export function collectDomRefs() {
     misc: {
       codeWrapper: byId('codeWrapper'),
       eraserCursor: byId('eraserCursor'),
+      textOverlay: byId('textInputOverlay'),
+      textInput: byId('textInputArea'),
+      textApply: byId('textApplyBtn'),
+      textCancel: byId('textCancelBtn'),
       statusText: byId('statusText'),
       guestList: byId('guestList'),
       guestEmpty: byId('guestEmpty'),

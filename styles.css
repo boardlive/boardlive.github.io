@@ -224,6 +224,70 @@
     }
     .hidden { display:none !important; }
     .board { position:relative; height: 100%; overflow:auto; background:#0b1220; }
+    .text-input-overlay{
+      position:absolute;
+      display:flex;
+      flex-direction:column;
+      gap:.4rem;
+      background:#f8fafc;
+      color:#0f172a;
+      border:1px solid rgba(59,130,246,.45);
+      border-radius:.75rem;
+      padding:.6rem;
+      box-shadow:0 18px 36px rgba(2,6,23,.45);
+      resize:both;
+      overflow:hidden;
+      min-width:180px;
+      min-height:120px;
+      max-width:90%;
+      max-height:90%;
+      z-index:26;
+    }
+    .text-input-overlay[data-theme="dark"]{
+      background:#050a16;
+      color:#e2e8f0;
+      border-color:rgba(148,163,184,.6);
+    }
+    .text-input-overlay[hidden]{ display:none; }
+    .text-input-head{ display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+    .text-input-head strong{ font-size:.9rem; color:inherit; }
+    .text-input-actions{ display:flex; gap:.35rem; }
+    .text-input-actions .btn{ padding:.3rem .55rem; font-size:.75rem; border-radius:.45rem; background:#0f172a; border:1px solid rgba(15,23,42,.35); color:#e2e8f0; box-shadow:none; }
+    .text-input-overlay[data-theme="dark"] .text-input-actions .btn{
+      background:#111b2f;
+      border-color:rgba(148,163,184,.45);
+      color:#e2e8f0;
+    }
+    .text-input-actions .btn:hover,
+    .text-input-actions .btn:focus-visible{ border-color:#93c5fd; color:#bfdbfe; }
+    #textInputArea{
+      width:100%;
+      flex:1 1 auto;
+      min-height:100px;
+      background:#ffffff;
+      color:#0f172a;
+      border:1px solid rgba(148,163,184,.6);
+      border-radius:.55rem;
+      padding:.5rem;
+      font-family:inherit;
+      font-size:1rem;
+      line-height:1.4;
+      resize:none;
+      outline:none;
+    }
+    .text-input-overlay[data-theme="dark"] #textInputArea{
+      background:rgba(4,7,14,.92);
+      color:#f8fafc;
+      border-color:rgba(148,163,184,.45);
+    }
+    .text-input-hint{
+      font-size:.75rem;
+      color:rgba(15,23,42,.7);
+      text-align:left;
+    }
+    .text-input-overlay[data-theme="dark"] .text-input-hint{
+      color:rgba(226,232,240,.75);
+    }
     .board.guest-view { box-shadow: inset 0 0 0 2px rgba(59,130,246,.45); }
     .board.guest-view::after{
       content:"";

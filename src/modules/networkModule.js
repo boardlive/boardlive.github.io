@@ -5,7 +5,8 @@ import {
   toolStrokeColor as defaultToolStrokeColor,
   toolFillColor as defaultToolFillColor,
   getToolSize as defaultGetToolSize,
-  isShapeTool as defaultIsShapeTool
+  isShapeTool as defaultIsShapeTool,
+  getToolFont as defaultGetToolFont
 } from './toolsModule.js';
 
 const noop = () => {};
@@ -71,6 +72,7 @@ export function initNetworkModule({
     clearCanvas = noop,
     drawSegment = noop,
     drawShapeOnCanvas = noop,
+    drawTextBlock = () => [],
     beginHistoryAction = noop,
     commitHistoryAction = noop,
     resetHistory = noop,
@@ -108,7 +110,8 @@ export function initNetworkModule({
     toolStrokeColor = defaultToolStrokeColor,
     toolFillColor = defaultToolFillColor,
     getToolSize = defaultGetToolSize,
-    isShapeTool = defaultIsShapeTool
+    isShapeTool = defaultIsShapeTool,
+    getToolFont = defaultGetToolFont
   } = toolsApi;
 
   const {
@@ -670,6 +673,39 @@ export function initNetworkModule({
     }
   }
 
+  function emitText(payload = {}) {
+    if (!payload) return;
+    const message = {
+      type: 'text',
+      text: typeof payload.text === 'string' ? payload.text : '',
+      x: payload.x,
+      y: payload.y,
+      width: payload.width,
+      height: payload.height,
+      color: payload.color,
+      fontFamily: payload.fontFamily,
+      fontSize: payload.fontSize,
+      lineHeight: payload.lineHeight,
+      actionId: payload.actionId || nextActionId('text'),
+      authorId: payload.authorId || normalizeAuthorId(),
+      pageId: pagesState.activePageId || null
+    };
+    if (!message.text || message.text.trim().length === 0) return;
+    if (sessionState.isHost) {
+      broadcast(message);
+    } else if (
+      sessionState.conn &&
+      sessionState.conn.open &&
+      !sessionState.remoteLock
+    ) {
+      try {
+        sessionState.conn.send(message);
+      } catch (err) {
+        console.warn('No se pudo enviar el texto al anfitrión.', err);
+      }
+    }
+  }
+
   function emitImage(payload = {}) {
     if (!payload) return;
     const message = {
@@ -915,6 +951,80 @@ export function initNetworkModule({
               typeof msg.color === 'string' ? msg.color : fallbackColor,
             size: Number.isFinite(msg.size) ? msg.size : fallbackSize,
             fill,
+            pageId
+          },
+          { apply: false }
+        );
+        if (!sessionState.isHost) {
+          renderPageThumbnails({ force: true });
+        }
+        if (sessionState.isHost) {
+          schedulePageSnapshot();
+          broadcast(msg, source?.peer);
+        }
+        break;
+      }
+      case 'text': {
+        finalizeActiveImageIfPresent();
+        if (typeof msg.text !== 'string' || !msg.text.trim()) break;
+        const actionId = msg.actionId || nextActionId('text');
+        const authorId =
+          msg.authorId || (source ? source.peer : normalizeAuthorId());
+        const pageId = msg.pageId || pagesState.activePageId || null;
+        const fallbackColor = toolStrokeColor('text');
+        const fallbackSize = getToolSize('text');
+        const drawColor =
+          typeof msg.color === 'string' && msg.color.trim().length > 0
+            ? msg.color
+            : fallbackColor;
+        const drawFontSize =
+          Number.isFinite(msg.fontSize) && msg.fontSize > 0
+            ? msg.fontSize
+            : fallbackSize;
+        const drawFontFamily =
+          typeof msg.fontFamily === 'string' && msg.fontFamily.trim().length > 0
+            ? msg.fontFamily
+            : getToolFont('text');
+        const drawLineHeight =
+          Number.isFinite(msg.lineHeight) && msg.lineHeight > 0
+            ? msg.lineHeight
+            : Math.round(drawFontSize * 1.3);
+        const width = Number.isFinite(msg.width) ? msg.width : 200;
+        const height = Number.isFinite(msg.height) ? msg.height : 120;
+        drawTextBlock({
+          text: msg.text,
+          x: msg.x,
+          y: msg.y,
+          width,
+          height,
+          color: drawColor,
+          fontFamily: drawFontFamily,
+          fontSize: drawFontSize,
+          lineHeight: drawLineHeight
+        });
+        msg.actionId = actionId;
+        msg.authorId = authorId;
+        msg.pageId = pageId;
+        msg.color = drawColor;
+        msg.fontFamily = drawFontFamily;
+        msg.fontSize = drawFontSize;
+        msg.lineHeight = drawLineHeight;
+        msg.width = width;
+        msg.height = height;
+        ingestAction(
+          {
+            id: actionId,
+            authorId,
+            type: 'text',
+            text: msg.text,
+            x: msg.x,
+            y: msg.y,
+            width,
+            height,
+            color: drawColor,
+            fontFamily: drawFontFamily,
+            fontSize: drawFontSize,
+            lineHeight: drawLineHeight,
             pageId
           },
           { apply: false }
@@ -1502,6 +1612,7 @@ export function initNetworkModule({
     broadcast,
     emitStroke,
     emitShape,
+    emitText,
     emitImage,
     emitClear,
     emitBackground,

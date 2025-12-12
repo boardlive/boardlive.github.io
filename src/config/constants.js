@@ -24,6 +24,11 @@ export const TOOL_DEFAULTS = {
   pen: { stroke: '#111827', size: 4 },
   line: { stroke: '#f97316', size: 6 },
   arrow: { stroke: '#0f766e', size: 6 },
+  text: {
+    stroke: '#111827',
+    size: 28,
+    font: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif'
+  },
   rect: { stroke: '#2563eb', fill: '#bfdbfe', size: 5 },
   ellipse: { stroke: '#22c55e', fill: '#bbf7d0', size: 5 },
   highlight: { stroke: '#facc15', size: 20 }
@@ -52,6 +57,15 @@ export const TOOL_UI_COPY = {
     hint: 'Dibuja líneas con punta de flecha.',
     stroke: 'Color de la flecha',
     size: 'Grosor (px)',
+    showFill: false
+  },
+  text: {
+    icon: '🔤',
+    title: 'Texto',
+    hint: 'Haz clic para colocar un cuadro de texto y escribe dentro.',
+    stroke: 'Color del texto',
+    size: 'Tamaño (px)',
+    font: 'Fuente',
     showFill: false
   },
   rect: {

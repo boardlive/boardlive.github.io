@@ -29,6 +29,52 @@ export function hexToRgb(hex) {
   return { r, g, b };
 }
 
+function parseRgbString(value) {
+  if (typeof value !== 'string') return null;
+  const match = value
+    .replace(/\s+/g, '')
+    .match(/^rgba?\((\d{1,3}),(\d{1,3}),(\d{1,3})(?:,\d*(?:\.\d+)?)?\)$/i);
+  if (!match) return null;
+  const r = Number(match[1]);
+  const g = Number(match[2]);
+  const b = Number(match[3]);
+  if (
+    Number.isInteger(r) &&
+    Number.isInteger(g) &&
+    Number.isInteger(b) &&
+    r >= 0 &&
+    r <= 255 &&
+    g >= 0 &&
+    g <= 255 &&
+    b >= 0 &&
+    b <= 255
+  ) {
+    return { r, g, b };
+  }
+  return null;
+}
+
+export function colorLuminance(value) {
+  if (!value) return null;
+  let rgb = null;
+  const trimmed = value.toString().trim();
+  if (/^#?[0-9a-fA-F]{6}$/.test(trimmed)) {
+    rgb = hexToRgb(trimmed);
+  } else if (/^rgba?/i.test(trimmed)) {
+    rgb = parseRgbString(trimmed);
+  }
+  if (!rgb) return null;
+  const luminance =
+    (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  return luminance;
+}
+
+export function isLightColor(value, threshold = 0.6) {
+  const luminance = colorLuminance(value);
+  if (luminance === null) return false;
+  return luminance >= threshold;
+}
+
 export function highlightColor(base, alpha = 0.32) {
   const rgb = hexToRgb(base);
   if (!rgb) return `rgba(255,255,0,${alpha})`;

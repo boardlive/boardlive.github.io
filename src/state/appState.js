@@ -39,7 +39,10 @@ export const appState = {
     touchPanActive: false,
     historyActionStarted: false,
     undoStack: [],
-    redoStack: []
+    redoStack: [],
+    textInputActive: false,
+    textInputState: null,
+    textInputLastSize: { width: 260, height: 140 }
   },
   tools: {
     currentTool: 'pen',

@@ -4,13 +4,14 @@ import {
   IMAGE_MIN_SIZE
 } from '../config/constants.js';
 import { resolveBackgroundSetting } from '../config/backgrounds.js';
-import { clamp } from '../utils/helpers.js';
+import { clamp, isLightColor } from '../utils/helpers.js';
 import {
   isShapeTool,
   getToolSize,
   toolStrokeColor,
   toolFillColor,
-  getEraserSize
+  getEraserSize,
+  getToolFont
 } from './toolsModule.js';
 
 function noop() {}
@@ -208,7 +209,13 @@ export function initCanvasModule({
   } = buttons;
 
   const { imageFile: imageInput } = inputs;
-  const { eraserCursor: eraserCursorEl } = misc;
+  const {
+    eraserCursor: eraserCursorEl,
+    textOverlay: textOverlayEl,
+    textInput: textInputEl,
+    textApply: textApplyBtn,
+    textCancel: textCancelBtn
+  } = misc;
 
   const {
     getEffectiveTool,
@@ -223,6 +230,7 @@ export function initCanvasModule({
   const {
     emitStroke = noop,
     emitShape = noop,
+    emitText = noop,
     emitClear = noop,
     emitImage = noop,
     emitBackground = noop,
@@ -474,7 +482,11 @@ export function initCanvasModule({
       (action.type === 'stroke' &&
         (!Array.isArray(action.segments) || action.segments.length === 0)) ||
       (action.type === 'shape' &&
-        (!action.start || !action.end || !action.shape))
+        (!action.start || !action.end || !action.shape)) ||
+      (action.type === 'text' &&
+        (typeof action.text !== 'string' ||
+          !Number.isFinite(action.x) ||
+          !Number.isFinite(action.y)))
     ) {
       updateHistoryUi();
       return;
@@ -571,6 +583,21 @@ export function initCanvasModule({
             color: action.color,
             size: action.size,
             fill: action.fill
+          });
+        }
+        break;
+      case 'text':
+        if (typeof action.text === 'string') {
+          drawTextBlock({
+            text: action.text,
+            x: action.x,
+            y: action.y,
+            width: action.width,
+            height: action.height,
+            color: action.color,
+            fontFamily: action.fontFamily,
+            fontSize: action.fontSize,
+            lineHeight: action.lineHeight
           });
         }
         break;
@@ -750,6 +777,279 @@ export function initCanvasModule({
       }
     }
     ctx.restore();
+  }
+
+  function resolveFontFamily(fontFamily) {
+    if (typeof fontFamily === 'string' && fontFamily.trim().length > 0) {
+      return fontFamily;
+    }
+    return getToolFont('text');
+  }
+
+  function normalizeTextValue(text) {
+    if (typeof text === 'string') {
+      return text.replace(/\r\n/g, '\n');
+    }
+    if (text === null || text === undefined) return '';
+    return String(text).replace(/\r\n/g, '\n');
+  }
+
+  function wrapTextLines({
+    text,
+    width,
+    height,
+    fontFamily,
+    fontSize,
+    lineHeight
+  }) {
+    const normalizedText = normalizeTextValue(text);
+    const safeWidth = Math.max(4, Number(width) || 0);
+    const safeFontSize = Math.max(6, Number(fontSize) || 12);
+    const safeLineHeight = Math.max(
+      Math.round(safeFontSize * 1.2),
+      Number(lineHeight) || 0
+    );
+    const safeHeight = Math.max(safeLineHeight, Number(height) || safeLineHeight);
+    const maxLines = Math.max(1, Math.floor(safeHeight / safeLineHeight));
+    const lines = [];
+    ctx.save();
+    ctx.font = `${safeFontSize}px ${resolveFontFamily(fontFamily)}`;
+    const paragraphs = normalizedText.split('\n');
+    const pushLine = line => {
+      if (lines.length >= maxLines) return;
+      lines.push(line ?? '');
+    };
+    paragraphs.forEach((paragraph, idx) => {
+      if (lines.length >= maxLines) return;
+      if (paragraph.length === 0) {
+        pushLine('');
+        return;
+      }
+      let currentLine = '';
+      const tokens = paragraph.match(/(\S+|\s+)/g) || [''];
+      tokens.forEach(token => {
+        if (lines.length >= maxLines) return;
+        const isWhitespace = /^\s+$/.test(token);
+        if (isWhitespace && currentLine === '') {
+          return;
+        }
+        const tentative = currentLine + token;
+        const tentativeWidth = ctx.measureText(tentative).width;
+        if (tentativeWidth <= safeWidth || currentLine === '') {
+          currentLine = tentative;
+        } else {
+          pushLine(currentLine);
+          if (lines.length >= maxLines) {
+            currentLine = '';
+            return;
+          }
+          const trimmedToken = token.trimStart();
+          if (ctx.measureText(trimmedToken).width > safeWidth) {
+            let chunk = '';
+            for (const char of token) {
+              if (lines.length >= maxLines) break;
+              const chunkTest = chunk + char;
+              const chunkWidth = ctx.measureText(chunkTest).width;
+              if (chunkWidth <= safeWidth || chunk === '') {
+                chunk = chunkTest;
+              } else {
+                pushLine(chunk);
+                if (lines.length >= maxLines) {
+                  chunk = '';
+                  break;
+                }
+                chunk = char.trim().length === 0 ? '' : char;
+              }
+            }
+            currentLine = chunk;
+          } else {
+            currentLine = trimmedToken;
+          }
+        }
+      });
+      if (lines.length >= maxLines) return;
+      pushLine(currentLine);
+    });
+    ctx.restore();
+    return lines.slice(0, maxLines);
+  }
+
+  function drawTextBlock({
+    text,
+    x,
+    y,
+    width,
+    height,
+    color,
+    fontFamily,
+    fontSize,
+    lineHeight
+  }) {
+    if (!canvas || !ctx) return [];
+    const safeX = Number(x) || 0;
+    const safeY = Number(y) || 0;
+    const safeWidth = Math.max(4, Number(width) || 0);
+    const safeHeight = Math.max(4, Number(height) || 0);
+    const resolvedFontSize = Math.max(6, Number(fontSize) || getToolSize('text'));
+    const resolvedLineHeight = Math.max(
+      Math.round(resolvedFontSize * 1.3),
+      Number(lineHeight) || 0
+    );
+    const resolvedFont = resolveFontFamily(fontFamily);
+    const resolvedColor =
+      typeof color === 'string' && color.trim().length > 0
+        ? color
+        : toolStrokeColor('text');
+    const lines = wrapTextLines({
+      text,
+      width: safeWidth,
+      height: safeHeight,
+      fontFamily: resolvedFont,
+      fontSize: resolvedFontSize,
+      lineHeight: resolvedLineHeight
+    });
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(safeX, safeY, safeWidth, safeHeight);
+    ctx.clip();
+    ctx.fillStyle = resolvedColor;
+    ctx.font = `${resolvedFontSize}px ${resolvedFont}`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    lines.forEach((line, idx) => {
+      const lineY = safeY + idx * resolvedLineHeight;
+      if (lineY > safeY + safeHeight) return;
+      ctx.fillText(line ?? '', safeX, lineY);
+    });
+    ctx.restore();
+    return lines;
+  }
+
+  function desiredTextOverlaySize() {
+    const last = canvasState.textInputLastSize || {};
+    const width = clamp(Number(last.width) || 260, 160, 640);
+    const height = clamp(Number(last.height) || 140, 100, 640);
+    return { width, height };
+  }
+
+  function cancelTextInput({ focusCanvas = false } = {}) {
+    if (textOverlayEl) {
+      textOverlayEl.hidden = true;
+      textOverlayEl.setAttribute('hidden', 'true');
+      delete textOverlayEl.dataset.active;
+    }
+    if (textInputEl) {
+      textInputEl.value = '';
+    }
+    canvasState.textInputActive = false;
+    canvasState.textInputState = null;
+    if (focusCanvas && canvas && typeof canvas.focus === 'function') {
+      try {
+        canvas.focus();
+      } catch (err) {
+        // ignore
+      }
+    }
+  }
+
+  function showTextInputOverlay(position) {
+    if (!textOverlayEl || !textInputEl || !board) return;
+    cancelTextInput({ focusCanvas: false });
+    const scale = canvasState.canvasScale || 1;
+    const toolFontSize = Math.max(8, getToolSize('text'));
+    const toolFontFamily = getToolFont('text');
+    const textColor = toolStrokeColor('text');
+    const lineHeight = Math.round(toolFontSize * 1.3);
+    const { width, height } = desiredTextOverlaySize();
+    textOverlayEl.style.width = `${width}px`;
+    textOverlayEl.style.height = `${height}px`;
+    const canvasLeft = canvas.offsetLeft || 0;
+    const canvasTop = canvas.offsetTop || 0;
+    const overlayLeft = canvasLeft + position.x * scale;
+    const overlayTop = canvasTop + position.y * scale;
+    textOverlayEl.style.left = `${overlayLeft}px`;
+    textOverlayEl.style.top = `${overlayTop}px`;
+    textOverlayEl.hidden = false;
+    textOverlayEl.removeAttribute('hidden');
+    textOverlayEl.dataset.active = 'true';
+    textOverlayEl.dataset.theme = isLightColor(textColor) ? 'dark' : 'light';
+    textInputEl.style.fontSize = `${toolFontSize}px`;
+    textInputEl.style.fontFamily = toolFontFamily;
+    textInputEl.style.lineHeight = `${lineHeight}px`;
+    textInputEl.style.color = textColor;
+    textInputEl.value = '';
+    try {
+      textInputEl.focus();
+      textInputEl.setSelectionRange?.(0, 0);
+    } catch (err) {
+      // ignore
+    }
+    const overlayRect = textOverlayEl.getBoundingClientRect();
+    const textRect = textInputEl.getBoundingClientRect();
+    const offsetXPx = textRect.left - overlayRect.left;
+    const offsetYPx = textRect.top - overlayRect.top;
+    const textCanvasX = position.x + offsetXPx / scale;
+    const textCanvasY = position.y + offsetYPx / scale;
+    canvasState.textInputActive = true;
+    canvasState.textInputState = {
+      x: textCanvasX,
+      y: textCanvasY,
+      color: textColor,
+      fontFamily: toolFontFamily,
+      fontSize: toolFontSize,
+      lineHeight
+    };
+  }
+
+  function applyTextInputOverlay() {
+    if (!canvasState.textInputActive || !canvasState.textInputState || !textInputEl) {
+      cancelTextInput();
+      return;
+    }
+    const value = normalizeTextValue(textInputEl.value);
+    if (value.trim().length === 0) {
+      cancelTextInput({ focusCanvas: true });
+      return;
+    }
+    const state = canvasState.textInputState;
+    const scale = canvasState.canvasScale || 1;
+    const widthPx = textInputEl.clientWidth || 200;
+    const heightPx = textInputEl.clientHeight || 120;
+    const payload = {
+      text: value,
+      x: state.x,
+      y: state.y,
+      width: Math.max(8, widthPx / scale),
+      height: Math.max(8, heightPx / scale),
+      color: state.color,
+      fontFamily: state.fontFamily,
+      fontSize: state.fontSize,
+      lineHeight: state.lineHeight
+    };
+    beginHistoryAction({
+      type: 'text',
+      data: payload
+    });
+    const actionId = canvasState.pendingAction?.id;
+    drawTextBlock(payload);
+    commitHistoryAction();
+    emitText({
+      ...payload,
+      actionId,
+      authorId: localAuthorId
+    });
+    if (textOverlayEl) {
+      canvasState.textInputLastSize = {
+        width: textOverlayEl.clientWidth || widthPx,
+        height: textOverlayEl.clientHeight || heightPx
+      };
+    } else {
+      canvasState.textInputLastSize = { width: widthPx, height: heightPx };
+    }
+    cancelTextInput({ focusCanvas: true });
+    if (sessionState.isHost) {
+      pagesScheduleSnapshot();
+    }
   }
 
   function clearCanvasPixels() {
@@ -1260,6 +1560,22 @@ export function initCanvasModule({
       }
       return;
     }
+    const tool = getEffectiveTool();
+    if (tool !== 'text' && canvasState.textInputActive) {
+      cancelTextInput({ focusCanvas: false });
+    }
+    if (tool === 'text') {
+      const pos = pointerXY(e);
+      if (pos) {
+        showTextInputOverlay(pos);
+      }
+      if (canvasState.tempErasePointerId === pointerId) {
+        setEraserMode(canvasState.eraseModeBeforeOverride);
+        canvasState.tempErasePointerId = null;
+      }
+      e.preventDefault();
+      return;
+    }
     if (e?.pointerId !== undefined) {
       canvasState.activePointerId = e.pointerId;
       if (canvas?.setPointerCapture) {
@@ -1270,7 +1586,6 @@ export function initCanvasModule({
         }
       }
     }
-    const tool = getEffectiveTool();
     const shapeTool = isShapeTool(tool);
     beginHistoryAction({
       type: shapeTool ? 'shape' : 'stroke',
@@ -1885,6 +2200,7 @@ export function initCanvasModule({
 
   function handleClear() {
     finalizeActiveImageIfPresent();
+    cancelTextInput({ focusCanvas: false });
     beginHistoryAction({ type: 'clear' });
     clearCanvas();
     const actionId = canvasState.pendingAction?.id;
@@ -2074,6 +2390,24 @@ export function initCanvasModule({
       if (input) input.value = '';
     });
 
+    textApplyBtn?.addEventListener('click', () => {
+      applyTextInputOverlay();
+    });
+
+    textCancelBtn?.addEventListener('click', () => {
+      cancelTextInput({ focusCanvas: true });
+    });
+
+    textInputEl?.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelTextInput({ focusCanvas: true });
+      } else if ((e.key === 'Enter' || e.key === 'Return') && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        applyTextInputOverlay();
+      }
+    });
+
     clearBtn?.addEventListener('click', handleClear);
 
     if (typeof ResizeObserver === 'function') {
@@ -2133,6 +2467,7 @@ export function initCanvasModule({
     clearCanvas,
     drawSegment,
     drawShapeOnCanvas,
+    drawTextBlock,
     beginHistoryAction,
     commitHistoryAction,
     resetHistory,
@@ -2155,6 +2490,7 @@ export function initCanvasModule({
     setBaselineImage,
     emitStroke,
     emitShape: emitShapeEvent,
+    emitText,
     emitImage,
     emitClear: broadcastClear,
     emitCanvasSnapshot,
