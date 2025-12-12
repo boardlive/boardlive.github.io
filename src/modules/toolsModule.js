@@ -61,7 +61,7 @@ function setToolFillTransparent(tool, value) {
 }
 
 export function isShapeTool(tool) {
-  return tool === 'line' || tool === 'rect' || tool === 'ellipse';
+  return tool === 'line' || tool === 'arrow' || tool === 'rect' || tool === 'ellipse';
 }
 
 export function toolDisplayLabel(tool) {
@@ -588,7 +588,7 @@ export function initToolsModule({ appState, domRefs }) {
       }
       return;
     }
-    const allowed = ['pen', 'line', 'rect', 'ellipse', 'highlight'];
+    const allowed = ['pen', 'line', 'arrow', 'rect', 'ellipse', 'highlight'];
     const next = allowed.includes(tool) ? tool : 'pen';
     toolsState.currentTool = next;
     if (canvasState.erasing) {

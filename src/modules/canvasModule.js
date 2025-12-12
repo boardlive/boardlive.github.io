@@ -663,7 +663,8 @@ export function initCanvasModule({
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color || '#000000';
-    ctx.lineWidth = Number.isFinite(size) ? size : getToolSize(shape);
+    const resolvedSize = Number.isFinite(size) ? size : getToolSize(shape);
+    ctx.lineWidth = resolvedSize;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (shape === 'line') {
@@ -711,6 +712,42 @@ export function initCanvasModule({
         );
       }
       ctx.stroke();
+    } else if (shape === 'arrow') {
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 2) {
+        ctx.beginPath();
+        ctx.arc(start.x, start.y, Math.max(resolvedSize / 2, 2), 0, Math.PI * 2);
+        ctx.fillStyle = color || '#000000';
+        ctx.fill();
+      } else {
+        const ux = dx / length;
+        const uy = dy / length;
+        const headLength = Math.min(Math.max(resolvedSize * 4, 16), length * 0.5);
+        const headWidth = Math.max(resolvedSize * 2, headLength * 0.6);
+        const baseX = end.x - ux * headLength;
+        const baseY = end.y - uy * headLength;
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(baseX, baseY);
+        ctx.stroke();
+        const px = -uy;
+        const py = ux;
+        const halfWidth = headWidth / 2;
+        const leftX = baseX + px * halfWidth;
+        const leftY = baseY + py * halfWidth;
+        const rightX = baseX - px * halfWidth;
+        const rightY = baseY - py * halfWidth;
+        ctx.beginPath();
+        ctx.moveTo(end.x, end.y);
+        ctx.lineTo(leftX, leftY);
+        ctx.lineTo(rightX, rightY);
+        ctx.closePath();
+        ctx.fillStyle = color || '#000000';
+        ctx.fill();
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }

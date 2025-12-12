@@ -23,6 +23,7 @@ export const peerConfig = {
 export const TOOL_DEFAULTS = {
   pen: { stroke: '#111827', size: 4 },
   line: { stroke: '#f97316', size: 6 },
+  arrow: { stroke: '#0f766e', size: 6 },
   rect: { stroke: '#2563eb', fill: '#bfdbfe', size: 5 },
   ellipse: { stroke: '#22c55e', fill: '#bbf7d0', size: 5 },
   highlight: { stroke: '#facc15', size: 20 }
@@ -42,6 +43,14 @@ export const TOOL_UI_COPY = {
     title: 'Línea recta',
     hint: 'Arrastra para crear segmentos rectos.',
     stroke: 'Color de la línea',
+    size: 'Grosor (px)',
+    showFill: false
+  },
+  arrow: {
+    icon: '➡️',
+    title: 'Flecha',
+    hint: 'Dibuja líneas con punta de flecha.',
+    stroke: 'Color de la flecha',
     size: 'Grosor (px)',
     showFill: false
   },
