@@ -44,6 +44,7 @@ export function initUiModule({
     labels = {},
     panels = {},
     qr: qrDom = {},
+    about: aboutDom = {},
     misc = {}
   } = domRefs;
 
@@ -66,6 +67,8 @@ export function initUiModule({
     copyUrl: copyUrlBtn,
     qrToggle: qrBtn,
     qrClose: qrCloseBtn,
+    about: aboutBtn,
+    aboutClose: aboutCloseBtn,
     viewToggle: viewToggleBtn,
     menuToggle: menuToggleBtn,
     undo: undoBtn,
@@ -90,6 +93,8 @@ export function initUiModule({
     url: qrUrl,
     copyFeedback: copyUrlFeedback
   } = qrDom;
+
+  const { overlay: aboutOverlay } = aboutDom;
 
   const {
     codeWrapper,
@@ -685,6 +690,16 @@ export function initUiModule({
     hideCopyFeedback();
   }
 
+  function showAbout() {
+    if (!aboutOverlay) return;
+    aboutOverlay.style.display = 'flex';
+    window.setTimeout(() => aboutCloseBtn?.focus(), 60);
+  }
+
+  function hideAbout() {
+    if (aboutOverlay) aboutOverlay.style.display = 'none';
+  }
+
   function updateGuestPanelView() {
     if (!guestPanel) return;
     const isHost = sessionState.isHost;
@@ -1258,6 +1273,16 @@ export function initUiModule({
     qrCloseBtn?.addEventListener('click', hideQr);
     qrOverlay?.addEventListener('click', e => {
       if (e.target === qrOverlay) hideQr();
+    });
+
+    aboutBtn?.addEventListener('click', showAbout);
+    aboutCloseBtn?.addEventListener('click', hideAbout);
+    aboutOverlay?.addEventListener('click', e => {
+      if (e.target === aboutOverlay) hideAbout();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (aboutOverlay?.style.display === 'flex') hideAbout();
     });
 
     copyUrlBtn?.addEventListener('click', copyShareLink);

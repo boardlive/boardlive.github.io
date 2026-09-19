@@ -55,6 +55,8 @@ export function collectDomRefs() {
       copyUrl: byId('copyUrlBtn'),
       qrToggle: byId('qrBtn'),
       qrClose: byId('qrClose'),
+      about: byId('aboutBtn'),
+      aboutClose: byId('aboutClose'),
       viewToggle: byId('viewToggle'),
       menuToggle: byId('menuToggle'),
       undo: byId('undo'),
@@ -106,6 +108,9 @@ export function collectDomRefs() {
       toolSettingsHead:
         toolSettingsPanel?.querySelector('.tool-settings-head') ?? null,
       pageTab: toolSettingsPanel?.querySelector('.tool-tab[data-tab="page"]') ?? null
+    },
+    about: {
+      overlay: byId('aboutOverlay')
     },
     qr: {
       overlay: byId('qrOverlay'),

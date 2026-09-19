@@ -48,3 +48,12 @@ Abre `http://localhost:8080` en dos navegadores o dispositivos para probar el fl
 4. Abre un pull request describiendo la mejora o corrección y los pasos para probarla.
 
 Las incidencias y propuestas de mejora pueden registrarse en la pestaña *Issues* del repositorio.
+
+## Licencia
+
+© 2026 [Juan José de Haro](https://bilateria.org)
+
+- Código: [AGPL v3](https://www.gnu.org/licenses/agpl-3.0.html) (véase el archivo `LICENSE`).
+- Contenidos: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.es).
+
+La información de licencia está disponible en la propia aplicación, en el botón «ℹ️» de la barra superior.

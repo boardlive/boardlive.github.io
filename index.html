@@ -71,6 +71,7 @@
           </button>
         </div>
         <button id="viewToggle" class="btn view-toggle" type="button" aria-pressed="false" title="Maximizar área de dibujo">⛶ Maximizar</button>
+        <button id="aboutBtn" class="btn icon-btn about-btn" type="button" aria-haspopup="dialog" aria-label="Acerca de BoardLive" title="Acerca de BoardLive">ℹ️</button>
       </div>
     </header>
     <div id="toolSettingsPanel" class="tool-settings-popover edit-only" aria-live="polite" data-open="false" aria-hidden="true">
@@ -212,6 +213,19 @@
         <div id="qrUrl" class="qr-url host-only" title="Haz clic para copiar" role="button" tabindex="-1" aria-disabled="true">—</div>
         <div id="copyUrlFeedback" class="copy-feedback hidden" aria-live="polite">Enlace copiado</div>
       </div>
+    </div>
+  </div>
+
+  <!-- Acerca de -->
+  <div class="qr-overlay" id="aboutOverlay" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <div class="qr-card about-card">
+      <div class="qr-head">
+        <strong id="aboutTitle">Acerca de BoardLive</strong>
+        <button id="aboutClose" class="btn">Cerrar</button>
+      </div>
+      <p class="about-text">Pizarra colaborativa en tiempo real para clases, tutorías y talleres.</p>
+      <p class="about-text">© 2026 <a href="https://bilateria.org" target="_blank" rel="noopener">Juan José de Haro</a></p>
+      <p class="about-text">Código bajo <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">licencia AGPL v3</a> y contenidos bajo <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.es" target="_blank" rel="noopener">CC BY-SA 4.0</a>.</p>
     </div>
   </div>
 
